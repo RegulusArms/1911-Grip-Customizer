@@ -234,11 +234,6 @@
       </select>
     </div>
 
-    <div class="field">
-      <label for="bgInput">Or upload your own SVG</label>
-      <input type="file" id="bgInput" accept=".svg,image/svg+xml">
-    </div>
-
     <hr class="sep">
 
     <button class="btn btn-primary" id="downloadBtn" disabled>Download PNG</button>
@@ -307,7 +302,6 @@
   const handleLayer = document.getElementById("handleLayer");
   const imageInput = document.getElementById("imageInput");
   const shapeSelect = document.getElementById("shapeSelect");
-  const bgInput = document.getElementById("bgInput");
   const fitBtn = document.getElementById("fitBtn");
   const removeImgBtn = document.getElementById("removeImgBtn");
   const zoomRange = document.getElementById("zoomRange");
@@ -714,31 +708,7 @@
   shapeSelect.addEventListener("change", () => {
     const shape = BUILTIN_SHAPES[shapeSelect.value];
     if (!shape) return;
-    bgInput.value = "";
     parseAndLoadBackground(shape.svg);
-  });
-
-  // ---- events: background upload (custom shape) ----
-  function ensureCustomOption(){
-    if (!shapeSelect.querySelector('option[value="custom"]')){
-      const opt = document.createElement("option");
-      opt.value = "custom";
-      opt.textContent = "Custom upload";
-      shapeSelect.appendChild(opt);
-    }
-  }
-
-  bgInput.addEventListener("change", (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      parseAndLoadBackground(ev.target.result);
-      ensureCustomOption();
-      shapeSelect.value = "custom";
-    };
-    reader.onerror = () => alert("Couldn't read that SVG file.");
-    reader.readAsText(file);
   });
 
   // ---- events: controls ----
