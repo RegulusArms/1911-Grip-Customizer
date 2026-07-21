@@ -1,0 +1,924 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1911 Grip Customizer</title>
+<style>
+  :root{
+    --panel-bg:#ffffff;
+    --panel-border:#e2e2e7;
+    --accent:#3b82f6;
+    --text:#1f2430;
+    --muted:#6b7280;
+    --bg:#f4f5f7;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;
+    height:100%;
+    background:var(--bg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--text);
+  }
+  .app{
+    display:flex;
+    min-height:100vh;
+    align-items:stretch;
+  }
+  .panel{
+    width:300px;
+    flex:0 0 300px;
+    background:var(--panel-bg);
+    border-right:1px solid var(--panel-border);
+    padding:20px 18px;
+    overflow-y:auto;
+  }
+  .panel h1{
+    font-size:17px;
+    margin:0 0 4px;
+  }
+  .panel .sub{
+    font-size:12.5px;
+    color:var(--muted);
+    margin:0 0 20px;
+  }
+  .field{
+    margin-bottom:18px;
+  }
+  .field label{
+    display:block;
+    font-size:12.5px;
+    font-weight:600;
+    margin-bottom:6px;
+    color:var(--text);
+  }
+  .field .row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .field .row span.val{
+    font-size:12px;
+    color:var(--muted);
+    width:44px;
+    text-align:right;
+    flex:0 0 auto;
+  }
+  input[type="range"]{
+    flex:1 1 auto;
+    accent-color:var(--accent);
+  }
+  input[type="file"]{
+    font-size:12.5px;
+    width:100%;
+  }
+  .btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+    border:1px solid var(--panel-border);
+    background:#fff;
+    color:var(--text);
+    padding:8px 12px;
+    font-size:13px;
+    border-radius:8px;
+    cursor:pointer;
+    transition:background .12s ease;
+  }
+  .btn:hover{background:#f2f3f5;}
+  .btn:disabled{opacity:.45;cursor:not-allowed;}
+  .btn-row{
+    display:flex;
+    gap:8px;
+    flex-wrap:wrap;
+  }
+  .btn-primary{
+    background:var(--accent);
+    color:#fff;
+    border-color:var(--accent);
+    width:100%;
+    padding:11px 12px;
+    font-size:14px;
+    font-weight:600;
+  }
+  .btn-primary:hover{background:#2f6fdb;}
+  .checkbox-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    font-size:13px;
+  }
+  hr.sep{
+    border:none;
+    border-top:1px solid var(--panel-border);
+    margin:18px 0;
+  }
+  .stage-wrap{
+    flex:1 1 auto;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    justify-content:center;
+    padding:30px;
+    gap:14px;
+  }
+  .stage-container{
+    position:relative;
+    height:min(82vh, 720px);
+    aspect-ratio:223.01 / 622.5;
+    border-radius:10px;
+    overflow:hidden;
+    box-shadow:0 1px 3px rgba(0,0,0,.12), 0 8px 24px rgba(0,0,0,.08);
+    background-image:
+      linear-gradient(45deg, #e6e6ea 25%, transparent 25%),
+      linear-gradient(-45deg, #e6e6ea 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #e6e6ea 75%),
+      linear-gradient(-45deg, transparent 75%, #e6e6ea 75%);
+    background-size:18px 18px;
+    background-position:0 0, 0 9px, 9px -9px, -9px 0px;
+    background-color:#fff;
+    touch-action:none;
+  }
+  #stage{
+    display:block;
+    width:100%;
+    height:100%;
+  }
+  .handle-layer{
+    position:absolute;
+    inset:0;
+    pointer-events:none;
+    display:none;
+  }
+  .handle{
+    position:absolute;
+    transform:translate(-50%,-50%);
+    pointer-events:auto;
+    border-radius:50%;
+    background:#fff;
+    border:2px solid var(--accent);
+    box-shadow:0 1px 4px rgba(0,0,0,.35);
+  }
+  .handle.corner{
+    width:16px;
+    height:16px;
+  }
+  .handle.rotate{
+    width:20px;
+    height:20px;
+    cursor:grab;
+    background:var(--accent);
+    border-color:#fff;
+  }
+  .hint{
+    font-size:12.5px;
+    color:var(--muted);
+    text-align:center;
+    max-width:420px;
+  }
+  @media (max-width:760px){
+    .app{flex-direction:column;}
+    .panel{width:auto;flex:none;border-right:none;border-bottom:1px solid var(--panel-border);}
+    .stage-container{height:min(60vh, 560px);}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="panel">
+    <h1>1911 Grip Customizer</h1>
+    <p class="sub">Upload your image, then drag to move, use the corner handles to resize, and the top handle (or shift + scroll, or the [ ] keys) to rotate. The image only shows through the colored area of the shape.</p>
+
+    <div class="field">
+      <label for="imageInput">Your image</label>
+      <input type="file" id="imageInput" accept="image/*">
+    </div>
+
+    <div class="btn-row" style="margin-bottom:18px;">
+      <button class="btn" id="fitBtn" disabled>Fit to shape</button>
+      <button class="btn" id="removeImgBtn" disabled>Remove image</button>
+    </div>
+
+    <div class="field">
+      <label for="zoomRange">Zoom <span id="zoomLabel" style="font-weight:400;color:var(--muted);">100%</span></label>
+      <div class="row">
+        <input type="range" id="zoomRange" min="20" max="500" value="100" step="1" disabled>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="rotRange">Rotation <span id="rotLabel" style="font-weight:400;color:var(--muted);">0°</span></label>
+      <div class="row">
+        <input type="range" id="rotRange" min="-180" max="180" value="0" step="1" disabled>
+      </div>
+      <div class="btn-row" style="margin-top:8px;">
+        <button class="btn" id="rotLeftBtn" disabled>⟲ 15°</button>
+        <button class="btn" id="rotRightBtn" disabled>⟳ 15°</button>
+      </div>
+    </div>
+
+    <div class="field checkbox-row">
+      <input type="checkbox" id="guideCheckbox" checked>
+      <label for="guideCheckbox" style="margin:0;font-weight:400;">Show image outline guide</label>
+    </div>
+
+    <hr class="sep">
+
+    <div class="field">
+      <label for="shapeSelect">Background shape</label>
+      <select id="shapeSelect" style="width:100%;padding:7px 8px;font-size:13px;border-radius:8px;border:1px solid var(--panel-border);">
+        <option value="left">1911 Left</option>
+        <option value="right">1911 Right</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="bgInput">Or upload your own SVG</label>
+      <input type="file" id="bgInput" accept=".svg,image/svg+xml">
+    </div>
+
+    <hr class="sep">
+
+    <button class="btn btn-primary" id="downloadBtn" disabled>Download PNG</button>
+  </aside>
+
+  <main class="stage-wrap">
+    <div class="stage-container" id="stageContainer">
+      <svg id="stage" xmlns="http://www.w3.org/2000/svg"></svg>
+      <div class="handle-layer" id="handleLayer">
+        <div class="handle corner" id="handle-tl" style="cursor:nwse-resize;"></div>
+        <div class="handle corner" id="handle-tr" style="cursor:nesw-resize;"></div>
+        <div class="handle corner" id="handle-br" style="cursor:nwse-resize;"></div>
+        <div class="handle corner" id="handle-bl" style="cursor:nesw-resize;"></div>
+        <div class="handle rotate" id="handle-rotate" title="Rotate"></div>
+      </div>
+    </div>
+    <p class="hint">Drag inside the outline to move it, drag a corner to resize. Rotate by dragging the blue dot above it, holding shift while scrolling over the image, or pressing the [ and ] keys.</p>
+  </main>
+</div>
+
+<script>
+(function(){
+  "use strict";
+  const NS = "http://www.w3.org/2000/svg";
+  const XLINK = "http://www.w3.org/1999/xlink";
+
+  const SVG_LEFT = `<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 223.01 622.5">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #808285;
+      }
+    </style>
+  </defs>
+  <path class="cls-1" d="M203.54,44.62C168.74,23.78,138.68,13.14,118.58,7.45,93.48.36,77.84-.73,63.72.37c-14.22,1.11-25.77,4.34-33.63,7.08L0,586.22l176.99,36.28c.26-3.45,1.9-20.87,16.82-33.63,11.79-10.08,24.89-11.29,29.2-11.5-6.49-177.59-12.98-355.17-19.47-532.75ZM117.7,553.03c-10.26,0-18.58-8.32-18.58-18.58s8.32-18.59,18.58-18.59,18.58,8.32,18.58,18.59-8.32,18.58-18.58,18.58ZM117.7,94.18c-10.26,0-18.58-8.32-18.58-18.58s8.32-18.59,18.58-18.59,18.58,8.32,18.58,18.59-8.32,18.58-18.58,18.58Z"/>
+</svg>`;
+
+  const SVG_RIGHT = `<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 223.89 624.13">
+  <defs>
+    <style>
+      .cls-1 {
+        fill: #6d6e71;
+      }
+    </style>
+  </defs>
+  <path class="cls-1" d="M203.54,174.57c-2.86-2.41-20.53-17.87-21.39-43.92-.78-23.99,13.25-39.75,16.08-42.8-2.07-27.44-4.13-54.87-6.2-82.31-17.84-4.23-52.73-10-94.69,0C59.3,14.61,32.64,32.55,18.53,43.63c.11,2.7.22,5.4.33,8.1,1.06.15,2.12.3,3.18.45-.56,23.53-1.11,47.07-1.66,70.6h-4.4C10.66,274.85,5.33,426.92,0,579c3.98.32,18.76,1.98,31.26,14.28,12.41,12.23,14.36,26.85,14.76,30.85,59.29-12.39,118.58-24.78,177.87-37.17l-20.35-412.39ZM105.84,553.58c-10.51,0-19.04-8.52-19.04-19.03s8.53-19.04,19.04-19.04,19.03,8.52,19.03,19.04-8.52,19.03-19.03,19.03ZM105.84,94.89c-10.51,0-19.04-8.52-19.04-19.04s8.53-19.03,19.04-19.03,19.03,8.52,19.03,19.03-8.52,19.04-19.03,19.04Z"/>
+</svg>`;
+
+  const BUILTIN_SHAPES = {
+    left: { label: "1911 Left", svg: SVG_LEFT },
+    right: { label: "1911 Right", svg: SVG_RIGHT }
+  };
+
+  // ---- state ----
+  let bg = null;         // { w, h, viewBox, bgClones, clipClones, clipBBoxRect }
+  let img = null;        // { naturalW, naturalH, dataURL }
+  let xform = { cx:0, cy:0, scale:1, rot:0 };
+  let fitScale = 1;
+  let showGuide = true;
+
+  // ---- dom refs ----
+  const stage = document.getElementById("stage");
+  const stageContainer = document.getElementById("stageContainer");
+  const handleLayer = document.getElementById("handleLayer");
+  const imageInput = document.getElementById("imageInput");
+  const shapeSelect = document.getElementById("shapeSelect");
+  const bgInput = document.getElementById("bgInput");
+  const fitBtn = document.getElementById("fitBtn");
+  const removeImgBtn = document.getElementById("removeImgBtn");
+  const zoomRange = document.getElementById("zoomRange");
+  const zoomLabel = document.getElementById("zoomLabel");
+  const rotRange = document.getElementById("rotRange");
+  const rotLabel = document.getElementById("rotLabel");
+  const rotLeftBtn = document.getElementById("rotLeftBtn");
+  const rotRightBtn = document.getElementById("rotRightBtn");
+  const guideCheckbox = document.getElementById("guideCheckbox");
+  const downloadBtn = document.getElementById("downloadBtn");
+
+  // ---- background parsing ----
+  function parseAndLoadBackground(svgText){
+    let doc;
+    try{
+      doc = new DOMParser().parseFromString(svgText, "image/svg+xml");
+    }catch(e){
+      alert("Could not parse that SVG file.");
+      return;
+    }
+    const parseErr = doc.querySelector("parsererror");
+    const rootEl = doc.documentElement;
+    if (parseErr || !rootEl || rootEl.nodeName.toLowerCase() !== "svg"){
+      alert("That file doesn't look like a valid SVG.");
+      return;
+    }
+
+    let w, h, vb;
+    const vbAttr = rootEl.getAttribute("viewBox");
+    if (vbAttr){
+      const parts = vbAttr.trim().split(/[\s,]+/).map(Number);
+      w = parts[2]; h = parts[3]; vb = vbAttr;
+    } else {
+      w = parseFloat(rootEl.getAttribute("width")) || 300;
+      h = parseFloat(rootEl.getAttribute("height")) || 300;
+      vb = `0 0 ${w} ${h}`;
+    }
+    if (!w || !h || isNaN(w) || isNaN(h)){
+      alert("Couldn't determine the SVG's size (needs a viewBox or width/height).");
+      return;
+    }
+
+    // insert a live, offscreen copy so getComputedStyle / getBBox resolve correctly
+    const hidden = document.createElement("div");
+    hidden.style.cssText = "position:absolute;left:-99999px;top:0;width:0;height:0;overflow:hidden;";
+    document.body.appendChild(hidden);
+    const liveSvg = document.importNode(rootEl, true);
+    liveSvg.style.width = w + "px";
+    liveSvg.style.height = h + "px";
+    hidden.appendChild(liveSvg);
+
+    const shapeSelector = "path,rect,circle,ellipse,polygon,polyline";
+    const allShapes = Array.from(liveSvg.querySelectorAll(shapeSelector));
+    const bgClones = [];
+    const clipClones = [];
+    let clipBBox = null;
+
+    allShapes.forEach((el) => {
+      let cs;
+      try{ cs = getComputedStyle(el); }catch(e){ cs = null; }
+      const fill = cs ? cs.fill : el.getAttribute("fill");
+      let fillOpacity = cs ? parseFloat(cs.fillOpacity) : 1;
+      if (isNaN(fillOpacity)) fillOpacity = 1;
+      const isNoneFill = !fill || fill === "none" || fill === "transparent" || fill === "rgba(0, 0, 0, 0)";
+      const isPaintable = !isNoneFill && fillOpacity > 0.01;
+
+      const bgClone = el.cloneNode(false);
+      bgClone.removeAttribute("class");
+      bgClone.removeAttribute("style");
+      if (fill) bgClone.setAttribute("fill", fill);
+      bgClone.setAttribute("fill-opacity", String(fillOpacity));
+      const stroke = cs ? cs.stroke : null;
+      if (stroke && stroke !== "none"){
+        bgClone.setAttribute("stroke", stroke);
+        bgClone.setAttribute("stroke-width", cs.strokeWidth || "1");
+        bgClone.setAttribute("stroke-opacity", cs.strokeOpacity || "1");
+      }
+      bgClones.push(bgClone);
+
+      if (isPaintable){
+        const clipClone = el.cloneNode(false);
+        clipClone.removeAttribute("class");
+        clipClone.removeAttribute("style");
+        clipClone.removeAttribute("fill");
+        clipClones.push(clipClone);
+        try{
+          const bb = el.getBBox();
+          if (bb.width > 0 && bb.height > 0){
+            if (!clipBBox){
+              clipBBox = { x:bb.x, y:bb.y, x2:bb.x+bb.width, y2:bb.y+bb.height };
+            } else {
+              clipBBox.x = Math.min(clipBBox.x, bb.x);
+              clipBBox.y = Math.min(clipBBox.y, bb.y);
+              clipBBox.x2 = Math.max(clipBBox.x2, bb.x+bb.width);
+              clipBBox.y2 = Math.max(clipBBox.y2, bb.y+bb.height);
+            }
+          }
+        }catch(e){ /* ignore */ }
+      }
+    });
+
+    document.body.removeChild(hidden);
+
+    if (!clipBBox){
+      // no distinctly-filled shapes found; fall back to the whole canvas
+      clipBBox = { x:0, y:0, x2:w, y2:h };
+      if (clipClones.length === 0 && allShapes.length){
+        allShapes.forEach((el) => {
+          const c = el.cloneNode(false);
+          c.removeAttribute("class");
+          c.removeAttribute("style");
+          c.removeAttribute("fill");
+          clipClones.push(c);
+        });
+      }
+    }
+
+    bg = {
+      w, h, viewBox: vb,
+      bgClones, clipClones,
+      clipBBoxRect: { x:clipBBox.x, y:clipBBox.y, w:clipBBox.x2-clipBBox.x, h:clipBBox.y2-clipBBox.y }
+    };
+
+    if (img){
+      fitTransform();
+    }
+    buildStage();
+    updateHandles();
+  }
+
+  // ---- fit / transform helpers ----
+  function fitTransform(){
+    const cbb = bg.clipBBoxRect;
+    fitScale = Math.max(cbb.w/img.naturalW, cbb.h/img.naturalH) || 1;
+    xform = { cx: cbb.x + cbb.w/2, cy: cbb.y + cbb.h/2, scale: fitScale, rot: 0 };
+    syncZoomSlider();
+    syncRotationSlider();
+  }
+
+  // ---- building the visible stage ----
+  function buildStage(){
+    stage.innerHTML = "";
+    if (!bg) return;
+    stage.setAttribute("viewBox", bg.viewBox);
+    stage.setAttribute("preserveAspectRatio", "xMidYMid meet");
+
+    const defs = document.createElementNS(NS, "defs");
+    const clipPath = document.createElementNS(NS, "clipPath");
+    clipPath.id = "userClip";
+    bg.clipClones.forEach((c) => clipPath.appendChild(c.cloneNode(true)));
+    defs.appendChild(clipPath);
+    stage.appendChild(defs);
+
+    const bgGroup = document.createElementNS(NS, "g");
+    bgGroup.id = "bgLayer";
+    bg.bgClones.forEach((c) => bgGroup.appendChild(c.cloneNode(true)));
+    stage.appendChild(bgGroup);
+
+    const clipG = document.createElementNS(NS, "g");
+    clipG.setAttribute("clip-path", "url(#userClip)");
+    const moveG = document.createElementNS(NS, "g");
+    moveG.id = "movableGroup";
+    if (img){
+      const imageEl = document.createElementNS(NS, "image");
+      imageEl.id = "userImageEl";
+      imageEl.setAttributeNS(XLINK, "href", img.dataURL);
+      imageEl.setAttribute("href", img.dataURL);
+      imageEl.setAttribute("x", -img.naturalW/2);
+      imageEl.setAttribute("y", -img.naturalH/2);
+      imageEl.setAttribute("width", img.naturalW);
+      imageEl.setAttribute("height", img.naturalH);
+      imageEl.setAttribute("preserveAspectRatio", "none");
+      moveG.appendChild(imageEl);
+    }
+    clipG.appendChild(moveG);
+    stage.appendChild(clipG);
+
+    if (img){
+      const guideG = document.createElementNS(NS, "g");
+      guideG.id = "guideGroup";
+      const guideRect = document.createElementNS(NS, "rect");
+      guideRect.id = "guideRect";
+      guideRect.setAttribute("x", -img.naturalW/2);
+      guideRect.setAttribute("y", -img.naturalH/2);
+      guideRect.setAttribute("width", img.naturalW);
+      guideRect.setAttribute("height", img.naturalH);
+      guideRect.setAttribute("fill", "#ffffff");
+      guideRect.setAttribute("fill-opacity", "0.001");
+      guideRect.setAttribute("stroke", "#3b82f6");
+      const sw = Math.max(bg.w, bg.h) * 0.003;
+      guideRect.setAttribute("stroke-width", String(sw));
+      guideRect.setAttribute("stroke-dasharray", (sw*4) + "," + (sw*3));
+      guideRect.setAttribute("pointer-events", "all");
+      guideRect.style.cursor = "grab";
+      guideRect.style.strokeOpacity = showGuide ? "1" : "0";
+      guideG.appendChild(guideRect);
+      stage.appendChild(guideG);
+    }
+
+    updateImageTransform();
+    attachStageInteractions();
+  }
+
+  function updateImageTransform(){
+    const t = `translate(${xform.cx} ${xform.cy}) rotate(${xform.rot}) scale(${xform.scale})`;
+    const mg = document.getElementById("movableGroup");
+    const gg = document.getElementById("guideGroup");
+    if (mg) mg.setAttribute("transform", t);
+    if (gg) gg.setAttribute("transform", t);
+    updateHandles();
+  }
+
+  // ---- coordinate conversion ----
+  function stagePointFromEvent(evt){
+    const pt = stage.createSVGPoint();
+    pt.x = evt.clientX;
+    pt.y = evt.clientY;
+    const ctm = stage.getScreenCTM();
+    if (!ctm) return { x:0, y:0 };
+    const inv = ctm.inverse();
+    const p = pt.matrixTransform(inv);
+    return { x:p.x, y:p.y };
+  }
+
+  function localToStage(lx, ly){
+    const rad = xform.rot * Math.PI/180;
+    const sx = lx * xform.scale;
+    const sy = ly * xform.scale;
+    const rx = sx*Math.cos(rad) - sy*Math.sin(rad);
+    const ry = sx*Math.sin(rad) + sy*Math.cos(rad);
+    return { x: xform.cx + rx, y: xform.cy + ry };
+  }
+
+  function stagePointToContainerPx(x, y){
+    const pt = stage.createSVGPoint();
+    pt.x = x; pt.y = y;
+    const ctm = stage.getScreenCTM();
+    if (!ctm) return { x:0, y:0 };
+    const screenPt = pt.matrixTransform(ctm);
+    const rect = stageContainer.getBoundingClientRect();
+    return { x: screenPt.x - rect.left, y: screenPt.y - rect.top };
+  }
+
+  // ---- handles ----
+  function updateHandles(){
+    if (!img){
+      handleLayer.style.display = "none";
+      return;
+    }
+    handleLayer.style.display = "block";
+    const hw = img.naturalW/2, hh = img.naturalH/2;
+    const corners = {
+      tl: localToStage(-hw, -hh),
+      tr: localToStage(hw, -hh),
+      br: localToStage(hw, hh),
+      bl: localToStage(-hw, hh)
+    };
+    const rotLocalY = -hh - Math.max(img.naturalW, img.naturalH) * 0.14 - 10;
+    const rotStage = localToStage(0, rotLocalY);
+
+    placeHandle("handle-tl", corners.tl);
+    placeHandle("handle-tr", corners.tr);
+    placeHandle("handle-br", corners.br);
+    placeHandle("handle-bl", corners.bl);
+    placeHandle("handle-rotate", rotStage);
+  }
+
+  function placeHandle(id, stagePt){
+    const px = stagePointToContainerPx(stagePt.x, stagePt.y);
+    const el = document.getElementById(id);
+    if (!el) return;
+    el.style.left = px.x + "px";
+    el.style.top = px.y + "px";
+  }
+
+  // ---- dragging: move (guide rect, recreated on buildStage) ----
+  function attachStageInteractions(){
+    const guideRect = document.getElementById("guideRect");
+    if (!guideRect) return;
+    guideRect.addEventListener("pointerdown", (e) => {
+      e.preventDefault();
+      guideRect.style.cursor = "grabbing";
+      const start = stagePointFromEvent(e);
+      const startCx = xform.cx, startCy = xform.cy;
+      function move(ev){
+        const cur = stagePointFromEvent(ev);
+        xform.cx = startCx + (cur.x - start.x);
+        xform.cy = startCy + (cur.y - start.y);
+        updateImageTransform();
+      }
+      function up(){
+        guideRect.style.cursor = "grab";
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+      }
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    });
+  }
+
+  // ---- dragging: resize (corner handles, attached once) ----
+  function attachCornerHandle(id){
+    const el = document.getElementById(id);
+    el.addEventListener("pointerdown", (e) => {
+      if (!img) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const start = stagePointFromEvent(e);
+      const dx0 = start.x - xform.cx, dy0 = start.y - xform.cy;
+      const startDist = Math.hypot(dx0, dy0) || 0.0001;
+      const startScale = xform.scale;
+      function move(ev){
+        const cur = stagePointFromEvent(ev);
+        const dist = Math.hypot(cur.x - xform.cx, cur.y - xform.cy);
+        let newScale = startScale * (dist / startDist);
+        newScale = Math.max(0.02, Math.min(newScale, 60));
+        xform.scale = newScale;
+        updateImageTransform();
+        syncZoomSlider();
+      }
+      function up(){
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+      }
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    });
+  }
+  ["handle-tl","handle-tr","handle-br","handle-bl"].forEach(attachCornerHandle);
+
+  // ---- dragging: rotate ----
+  (function attachRotateHandle(){
+    const el = document.getElementById("handle-rotate");
+    el.addEventListener("pointerdown", (e) => {
+      if (!img) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const start = stagePointFromEvent(e);
+      const startAngle = Math.atan2(start.y - xform.cy, start.x - xform.cx) * 180/Math.PI;
+      const startRot = xform.rot;
+      function move(ev){
+        const cur = stagePointFromEvent(ev);
+        const curAngle = Math.atan2(cur.y - xform.cy, cur.x - xform.cx) * 180/Math.PI;
+        xform.rot = startRot + (curAngle - startAngle);
+        updateImageTransform();
+        syncRotationSlider();
+      }
+      function up(){
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+      }
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    });
+  })();
+
+  // ---- slider / control sync ----
+  function syncZoomSlider(){
+    const pct = Math.round((xform.scale / fitScale) * 100);
+    const clamped = Math.min(500, Math.max(20, pct));
+    zoomRange.value = clamped;
+    zoomLabel.textContent = pct + "%";
+  }
+  function syncRotationSlider(){
+    let r = ((xform.rot % 360) + 360) % 360;
+    if (r > 180) r -= 360;
+    rotRange.value = Math.round(r);
+    rotLabel.textContent = Math.round(xform.rot % 360) + "°";
+  }
+
+  function setControlsEnabled(enabled){
+    fitBtn.disabled = !enabled;
+    removeImgBtn.disabled = !enabled;
+    zoomRange.disabled = !enabled;
+    rotRange.disabled = !enabled;
+    rotLeftBtn.disabled = !enabled;
+    rotRightBtn.disabled = !enabled;
+    downloadBtn.disabled = !enabled;
+  }
+
+  // ---- events: image upload ----
+  imageInput.addEventListener("change", (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataURL = ev.target.result;
+      const tmp = new Image();
+      tmp.onload = () => {
+        img = { naturalW: tmp.naturalWidth || 300, naturalH: tmp.naturalHeight || 300, dataURL };
+        if (bg) fitTransform();
+        buildStage();
+        updateHandles();
+        setControlsEnabled(true);
+      };
+      tmp.onerror = () => alert("Couldn't read that image file.");
+      tmp.src = dataURL;
+    };
+    reader.onerror = () => alert("Couldn't read that image file.");
+    reader.readAsDataURL(file);
+  });
+
+  // ---- events: shape select (built-in shapes) ----
+  shapeSelect.addEventListener("change", () => {
+    const shape = BUILTIN_SHAPES[shapeSelect.value];
+    if (!shape) return;
+    bgInput.value = "";
+    parseAndLoadBackground(shape.svg);
+  });
+
+  // ---- events: background upload (custom shape) ----
+  function ensureCustomOption(){
+    if (!shapeSelect.querySelector('option[value="custom"]')){
+      const opt = document.createElement("option");
+      opt.value = "custom";
+      opt.textContent = "Custom upload";
+      shapeSelect.appendChild(opt);
+    }
+  }
+
+  bgInput.addEventListener("change", (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      parseAndLoadBackground(ev.target.result);
+      ensureCustomOption();
+      shapeSelect.value = "custom";
+    };
+    reader.onerror = () => alert("Couldn't read that SVG file.");
+    reader.readAsText(file);
+  });
+
+  // ---- events: controls ----
+  fitBtn.addEventListener("click", () => {
+    if (!img || !bg) return;
+    fitTransform();
+    updateImageTransform();
+  });
+
+  removeImgBtn.addEventListener("click", () => {
+    img = null;
+    buildStage();
+    updateHandles();
+    setControlsEnabled(false);
+  });
+
+  zoomRange.addEventListener("input", () => {
+    if (!img) return;
+    xform.scale = fitScale * (parseFloat(zoomRange.value) / 100);
+    zoomLabel.textContent = zoomRange.value + "%";
+    updateImageTransform();
+  });
+
+  rotRange.addEventListener("input", () => {
+    if (!img) return;
+    xform.rot = parseFloat(rotRange.value);
+    rotLabel.textContent = Math.round(xform.rot) + "°";
+    updateImageTransform();
+  });
+
+  rotLeftBtn.addEventListener("click", () => {
+    if (!img) return;
+    xform.rot -= 15;
+    updateImageTransform();
+    syncRotationSlider();
+  });
+  rotRightBtn.addEventListener("click", () => {
+    if (!img) return;
+    xform.rot += 15;
+    updateImageTransform();
+    syncRotationSlider();
+  });
+
+  guideCheckbox.addEventListener("change", () => {
+    showGuide = guideCheckbox.checked;
+    const gr = document.getElementById("guideRect");
+    if (gr) gr.style.strokeOpacity = showGuide ? "1" : "0";
+  });
+
+  // ---- rotate without the slider: shift + scroll wheel over the stage ----
+  stageContainer.addEventListener("wheel", (e) => {
+    if (!img) return;
+    if (!e.shiftKey){
+      // plain scroll still zooms, so scrolling the page doesn't get "stuck"
+      return;
+    }
+    e.preventDefault();
+    const step = e.deltaY > 0 ? 5 : -5;
+    xform.rot += step;
+    updateImageTransform();
+    syncRotationSlider();
+  }, { passive:false });
+
+  // ---- rotate without the slider: [ and ] keys ----
+  window.addEventListener("keydown", (e) => {
+    if (!img) return;
+    const tag = (document.activeElement && document.activeElement.tagName) || "";
+    if (["INPUT","SELECT","TEXTAREA"].includes(tag)) return; // don't hijack typing/sliders
+    if (e.key !== "[" && e.key !== "]") return;
+    e.preventDefault();
+    const step = e.shiftKey ? 15 : 1;
+    xform.rot += (e.key === "]" ? step : -step);
+    updateImageTransform();
+    syncRotationSlider();
+  });
+
+  window.addEventListener("resize", updateHandles);
+  window.addEventListener("scroll", updateHandles, true);
+
+  // ---- export ----
+  function exportPNG(){
+    if (!img || !bg){
+      alert("Upload an image first.");
+      return;
+    }
+    downloadBtn.disabled = true;
+    downloadBtn.textContent = "Preparing…";
+
+    const outSvg = document.createElementNS(NS, "svg");
+    outSvg.setAttribute("xmlns", NS);
+    outSvg.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:xlink", XLINK);
+    outSvg.setAttribute("viewBox", bg.viewBox);
+    outSvg.setAttribute("width", bg.w);
+    outSvg.setAttribute("height", bg.h);
+
+    const defs = document.createElementNS(NS, "defs");
+    const clipPath = document.createElementNS(NS, "clipPath");
+    clipPath.id = "exportClip";
+    bg.clipClones.forEach((c) => clipPath.appendChild(c.cloneNode(true)));
+    defs.appendChild(clipPath);
+    outSvg.appendChild(defs);
+
+    const bgGroup = document.createElementNS(NS, "g");
+    bg.bgClones.forEach((c) => bgGroup.appendChild(c.cloneNode(true)));
+    outSvg.appendChild(bgGroup);
+
+    const clipG = document.createElementNS(NS, "g");
+    clipG.setAttribute("clip-path", "url(#exportClip)");
+    const moveG = document.createElementNS(NS, "g");
+    moveG.setAttribute("transform", `translate(${xform.cx} ${xform.cy}) rotate(${xform.rot}) scale(${xform.scale})`);
+    const imageEl = document.createElementNS(NS, "image");
+    imageEl.setAttributeNS(XLINK, "href", img.dataURL);
+    imageEl.setAttribute("href", img.dataURL);
+    imageEl.setAttribute("x", -img.naturalW/2);
+    imageEl.setAttribute("y", -img.naturalH/2);
+    imageEl.setAttribute("width", img.naturalW);
+    imageEl.setAttribute("height", img.naturalH);
+    imageEl.setAttribute("preserveAspectRatio", "none");
+    moveG.appendChild(imageEl);
+    clipG.appendChild(moveG);
+    outSvg.appendChild(clipG);
+
+    const svgString = new XMLSerializer().serializeToString(outSvg);
+    let svg64;
+    try{
+      svg64 = btoa(unescape(encodeURIComponent(svgString)));
+    }catch(e){
+      alert("Export failed while encoding the image.");
+      resetDownloadBtn();
+      return;
+    }
+    const dataUrl = "data:image/svg+xml;base64," + svg64;
+
+    const longSide = Math.max(bg.w, bg.h);
+    const exportScale = Math.max(1, Math.min(8, Math.round(2400 / longSide)));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(bg.w * exportScale));
+    canvas.height = Math.max(1, Math.round(bg.h * exportScale));
+    const ctx = canvas.getContext("2d");
+
+    const im = new Image();
+    im.onload = () => {
+      ctx.clearRect(0,0,canvas.width, canvas.height);
+      ctx.drawImage(im, 0, 0, canvas.width, canvas.height);
+      canvas.toBlob((blob) => {
+        if (!blob){
+          alert("Export failed while creating the PNG.");
+          resetDownloadBtn();
+          return;
+        }
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "custom-design.png";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 3000);
+        resetDownloadBtn();
+      }, "image/png");
+    };
+    im.onerror = () => {
+      alert("Export failed while rendering the image. Try a different photo.");
+      resetDownloadBtn();
+    };
+    im.src = dataUrl;
+  }
+
+  function resetDownloadBtn(){
+    downloadBtn.disabled = !img;
+    downloadBtn.textContent = "Download PNG";
+  }
+
+  downloadBtn.addEventListener("click", exportPNG);
+
+  // ---- init ----
+  shapeSelect.value = "left";
+  parseAndLoadBackground(BUILTIN_SHAPES.left.svg);
+  setControlsEnabled(false);
+})();
+</script>
+</body>
+</html>
