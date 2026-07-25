@@ -295,6 +295,7 @@
   let xform = { cx:0, cy:0, scale:1, rot:0 };
   let fitScale = 1;
   let showGuide = true;
+  let currentShapeLabel = "";
 
   // ---- dom refs ----
   const stage = document.getElementById("stage");
@@ -425,9 +426,6 @@
       clipBBoxRect: { x:clipBBox.x, y:clipBBox.y, w:clipBBox.x2-clipBBox.x, h:clipBBox.y2-clipBBox.y }
     };
 
-    if (img){
-      fitTransform();
-    }
     buildStage();
     updateHandles();
   }
@@ -708,6 +706,7 @@
   shapeSelect.addEventListener("change", () => {
     const shape = BUILTIN_SHAPES[shapeSelect.value];
     if (!shape) return;
+    currentShapeLabel = shape.label;
     parseAndLoadBackground(shape.svg);
   });
 
@@ -789,6 +788,14 @@
   window.addEventListener("scroll", updateHandles, true);
 
   // ---- export ----
+  function buildExportFilename(){
+    const d = new Date();
+    const pad = (n) => String(n).padStart(2, "0");
+    const timestamp = `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+    const shapeSlug = (currentShapeLabel || "shape").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "");
+    return `${timestamp}-${shapeSlug}.jpg`;
+  }
+
   function exportJPG(){
     if (!img || !bg){
       alert("Upload an image first.");
@@ -864,7 +871,7 @@
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = "custom-design.jpg";
+        a.download = buildExportFilename();
         document.body.appendChild(a);
         a.click();
         a.remove();
@@ -888,6 +895,7 @@
 
   // ---- init ----
   shapeSelect.value = "left";
+  currentShapeLabel = BUILTIN_SHAPES.left.label;
   parseAndLoadBackground(BUILTIN_SHAPES.left.svg);
   setControlsEnabled(false);
 })();
