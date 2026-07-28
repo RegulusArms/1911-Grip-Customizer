@@ -104,6 +104,9 @@
     font-weight:600;
   }
   .btn-primary:hover{background:#2f6fdb;}
+  .btn-primary + .btn-primary{
+    margin-top:8px;
+  }
   .checkbox-row{
     display:flex;
     align-items:center;
@@ -114,6 +117,69 @@
     border:none;
     border-top:1px solid var(--panel-border);
     margin:18px 0;
+  }
+  .layer-list{
+    list-style:none;
+    margin:0;
+    padding:0;
+    border:1px solid var(--panel-border);
+    border-radius:8px;
+    overflow:hidden;
+  }
+  .layer-item{
+    display:flex;
+    align-items:center;
+    gap:7px;
+    padding:7px 8px;
+    font-size:12.5px;
+    background:#fff;
+    border-bottom:1px solid var(--panel-border);
+    cursor:pointer;
+    user-select:none;
+  }
+  .layer-item:last-child{border-bottom:none;}
+  .layer-item.active{
+    background:#eaf1fe;
+    outline:1px solid var(--accent);
+    outline-offset:-1px;
+  }
+  .layer-item.dragging{opacity:.4;}
+  .layer-drag-handle{
+    cursor:grab;
+    color:var(--muted);
+    font-size:14px;
+    line-height:1;
+    flex:0 0 auto;
+  }
+  .layer-name{
+    flex:1 1 auto;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .layer-remove{
+    flex:0 0 auto;
+    border:none;
+    background:transparent;
+    color:var(--muted);
+    font-size:15px;
+    line-height:1;
+    cursor:pointer;
+    padding:2px 5px;
+    border-radius:4px;
+  }
+  .layer-remove:hover{background:#f2f3f5;color:#c0392b;}
+  .layer-empty{
+    padding:10px 8px;
+    font-size:12px;
+    color:var(--muted);
+    text-align:center;
+  }
+  .download-note{
+    font-size:11.5px;
+    line-height:1.5;
+    color:var(--muted);
+    margin:12px 0 0;
   }
   .stage-wrap{
     flex:1 1 auto;
@@ -189,16 +255,21 @@
 <div class="app">
   <aside class="panel">
     <h1>1911 Grip Customizer</h1>
-    <p class="sub">Upload your image, then drag to move, use the corner handles to resize, and the top handle (or shift + scroll, or the [ ] keys) to rotate. The image only shows through the colored area of the shape.</p>
+    <p class="sub">Upload one or more images, then drag to move, use the corner handles to resize, and the top handle (or shift + scroll, or the [ ] keys) to rotate. Images only show through the colored area of the shape. Reorder layers by dragging them in the list below.</p>
 
     <div class="field">
-      <label for="imageInput">Your image</label>
-      <input type="file" id="imageInput" accept="image/*">
+      <label for="imageInput">Add image layer</label>
+      <input type="file" id="imageInput" accept="image/*" multiple>
+    </div>
+
+    <div class="field">
+      <label>Layers</label>
+      <ul class="layer-list" id="layerList"></ul>
     </div>
 
     <div class="btn-row" style="margin-bottom:18px;">
       <button class="btn" id="fitBtn" disabled>Fit to shape</button>
-      <button class="btn" id="removeImgBtn" disabled>Remove image</button>
+      <button class="btn" id="removeImgBtn" disabled>Remove layer</button>
     </div>
 
     <div class="field">
@@ -236,7 +307,9 @@
 
     <hr class="sep">
 
-    <button class="btn btn-primary" id="downloadBtn" disabled>Download JPG</button>
+    <button class="btn btn-primary" id="downloadBtn" disabled title="This is a mockup of the 1911 grips with your images positioned where you want them">Download JPG</button>
+    <button class="btn btn-primary" id="downloadPngBtn" disabled title="This is a full quality export of your images layed how you want them">Download Full Layers (PNG)</button>
+    <p class="download-note">Download both the JPG and PNG for each side of the PMAG (left and right), then email them to ross@regulusarms.com with your GunBroker order number as the subject line. You can send them as a zip file or as individual image attachments.</p>
   </aside>
 
   <main class="stage-wrap">
@@ -290,18 +363,20 @@
   };
 
   // ---- state ----
-  let bg = null;         // { w, h, viewBox, bgClones, clipClones, clipBBoxRect }
-  let img = null;        // { naturalW, naturalH, dataURL }
-  let xform = { cx:0, cy:0, scale:1, rot:0 };
-  let fitScale = 1;
+  let bg = null;              // { w, h, viewBox, bgClones, clipClones, clipBBoxRect }
+  let layers = [];             // [{ id, name, naturalW, naturalH, dataURL, xform:{cx,cy,scale,rot}, fitScale }]
+  let selectedLayerId = null;
+  let layerIdCounter = 0;
   let showGuide = true;
   let currentShapeLabel = "";
+  let dragSrcLi = null;
 
   // ---- dom refs ----
   const stage = document.getElementById("stage");
   const stageContainer = document.getElementById("stageContainer");
   const handleLayer = document.getElementById("handleLayer");
   const imageInput = document.getElementById("imageInput");
+  const layerListEl = document.getElementById("layerList");
   const shapeSelect = document.getElementById("shapeSelect");
   const fitBtn = document.getElementById("fitBtn");
   const removeImgBtn = document.getElementById("removeImgBtn");
@@ -313,6 +388,16 @@
   const rotRightBtn = document.getElementById("rotRightBtn");
   const guideCheckbox = document.getElementById("guideCheckbox");
   const downloadBtn = document.getElementById("downloadBtn");
+  const downloadPngBtn = document.getElementById("downloadPngBtn");
+
+  // ---- layer helpers ----
+  function getSelectedLayer(){
+    return layers.find((l) => l.id === selectedLayerId) || null;
+  }
+
+  function transformString(xform){
+    return `translate(${xform.cx} ${xform.cy}) rotate(${xform.rot}) scale(${xform.scale})`;
+  }
 
   // ---- background parsing ----
   function parseAndLoadBackground(svgText){
@@ -427,16 +512,15 @@
     };
 
     buildStage();
-    updateHandles();
   }
 
   // ---- fit / transform helpers ----
-  function fitTransform(){
+  function fitTransform(layer){
+    if (!layer || !bg) return;
     const cbb = bg.clipBBoxRect;
-    fitScale = Math.max(cbb.w/img.naturalW, cbb.h/img.naturalH) || 1;
-    xform = { cx: cbb.x + cbb.w/2, cy: cbb.y + cbb.h/2, scale: fitScale, rot: 0 };
-    syncZoomSlider();
-    syncRotationSlider();
+    const fitScale = Math.max(cbb.w/layer.naturalW, cbb.h/layer.naturalH) || 1;
+    layer.fitScale = fitScale;
+    layer.xform = { cx: cbb.x + cbb.w/2, cy: cbb.y + cbb.h/2, scale: fitScale, rot: 0 };
   }
 
   // ---- building the visible stage ----
@@ -460,32 +544,34 @@
 
     const clipG = document.createElementNS(NS, "g");
     clipG.setAttribute("clip-path", "url(#userClip)");
-    const moveG = document.createElementNS(NS, "g");
-    moveG.id = "movableGroup";
-    if (img){
+    layers.forEach((layer) => {
+      const layerG = document.createElementNS(NS, "g");
+      layerG.id = "layerGroup-" + layer.id;
+      layerG.setAttribute("transform", transformString(layer.xform));
       const imageEl = document.createElementNS(NS, "image");
-      imageEl.id = "userImageEl";
-      imageEl.setAttributeNS(XLINK, "href", img.dataURL);
-      imageEl.setAttribute("href", img.dataURL);
-      imageEl.setAttribute("x", -img.naturalW/2);
-      imageEl.setAttribute("y", -img.naturalH/2);
-      imageEl.setAttribute("width", img.naturalW);
-      imageEl.setAttribute("height", img.naturalH);
+      imageEl.setAttributeNS(XLINK, "href", layer.dataURL);
+      imageEl.setAttribute("href", layer.dataURL);
+      imageEl.setAttribute("x", -layer.naturalW/2);
+      imageEl.setAttribute("y", -layer.naturalH/2);
+      imageEl.setAttribute("width", layer.naturalW);
+      imageEl.setAttribute("height", layer.naturalH);
       imageEl.setAttribute("preserveAspectRatio", "none");
-      moveG.appendChild(imageEl);
-    }
-    clipG.appendChild(moveG);
+      layerG.appendChild(imageEl);
+      clipG.appendChild(layerG);
+    });
     stage.appendChild(clipG);
 
-    if (img){
+    const selected = getSelectedLayer();
+    if (selected){
       const guideG = document.createElementNS(NS, "g");
       guideG.id = "guideGroup";
+      guideG.setAttribute("transform", transformString(selected.xform));
       const guideRect = document.createElementNS(NS, "rect");
       guideRect.id = "guideRect";
-      guideRect.setAttribute("x", -img.naturalW/2);
-      guideRect.setAttribute("y", -img.naturalH/2);
-      guideRect.setAttribute("width", img.naturalW);
-      guideRect.setAttribute("height", img.naturalH);
+      guideRect.setAttribute("x", -selected.naturalW/2);
+      guideRect.setAttribute("y", -selected.naturalH/2);
+      guideRect.setAttribute("width", selected.naturalW);
+      guideRect.setAttribute("height", selected.naturalH);
       guideRect.setAttribute("fill", "#ffffff");
       guideRect.setAttribute("fill-opacity", "0.001");
       guideRect.setAttribute("stroke", "#3b82f6");
@@ -499,15 +585,17 @@
       stage.appendChild(guideG);
     }
 
-    updateImageTransform();
+    updateHandles();
     attachStageInteractions();
   }
 
-  function updateImageTransform(){
-    const t = `translate(${xform.cx} ${xform.cy}) rotate(${xform.rot}) scale(${xform.scale})`;
-    const mg = document.getElementById("movableGroup");
+  function updateSelectedLayerTransform(){
+    const selected = getSelectedLayer();
+    if (!selected) return;
+    const t = transformString(selected.xform);
+    const lg = document.getElementById("layerGroup-" + selected.id);
     const gg = document.getElementById("guideGroup");
-    if (mg) mg.setAttribute("transform", t);
+    if (lg) lg.setAttribute("transform", t);
     if (gg) gg.setAttribute("transform", t);
     updateHandles();
   }
@@ -524,7 +612,7 @@
     return { x:p.x, y:p.y };
   }
 
-  function localToStage(lx, ly){
+  function localToStage(xform, lx, ly){
     const rad = xform.rot * Math.PI/180;
     const sx = lx * xform.scale;
     const sy = ly * xform.scale;
@@ -545,20 +633,21 @@
 
   // ---- handles ----
   function updateHandles(){
-    if (!img){
+    const selected = getSelectedLayer();
+    if (!selected){
       handleLayer.style.display = "none";
       return;
     }
     handleLayer.style.display = "block";
-    const hw = img.naturalW/2, hh = img.naturalH/2;
+    const hw = selected.naturalW/2, hh = selected.naturalH/2;
     const corners = {
-      tl: localToStage(-hw, -hh),
-      tr: localToStage(hw, -hh),
-      br: localToStage(hw, hh),
-      bl: localToStage(-hw, hh)
+      tl: localToStage(selected.xform, -hw, -hh),
+      tr: localToStage(selected.xform, hw, -hh),
+      br: localToStage(selected.xform, hw, hh),
+      bl: localToStage(selected.xform, -hw, hh)
     };
-    const rotLocalY = -hh - Math.max(img.naturalW, img.naturalH) * 0.14 - 10;
-    const rotStage = localToStage(0, rotLocalY);
+    const rotLocalY = -hh - Math.max(selected.naturalW, selected.naturalH) * 0.14 - 10;
+    const rotStage = localToStage(selected.xform, 0, rotLocalY);
 
     placeHandle("handle-tl", corners.tl);
     placeHandle("handle-tr", corners.tr);
@@ -580,15 +669,17 @@
     const guideRect = document.getElementById("guideRect");
     if (!guideRect) return;
     guideRect.addEventListener("pointerdown", (e) => {
+      const selected = getSelectedLayer();
+      if (!selected) return;
       e.preventDefault();
       guideRect.style.cursor = "grabbing";
       const start = stagePointFromEvent(e);
-      const startCx = xform.cx, startCy = xform.cy;
+      const startCx = selected.xform.cx, startCy = selected.xform.cy;
       function move(ev){
         const cur = stagePointFromEvent(ev);
-        xform.cx = startCx + (cur.x - start.x);
-        xform.cy = startCy + (cur.y - start.y);
-        updateImageTransform();
+        selected.xform.cx = startCx + (cur.x - start.x);
+        selected.xform.cy = startCy + (cur.y - start.y);
+        updateSelectedLayerTransform();
       }
       function up(){
         guideRect.style.cursor = "grab";
@@ -604,20 +695,21 @@
   function attachCornerHandle(id){
     const el = document.getElementById(id);
     el.addEventListener("pointerdown", (e) => {
-      if (!img) return;
+      const selected = getSelectedLayer();
+      if (!selected) return;
       e.preventDefault();
       e.stopPropagation();
       const start = stagePointFromEvent(e);
-      const dx0 = start.x - xform.cx, dy0 = start.y - xform.cy;
+      const dx0 = start.x - selected.xform.cx, dy0 = start.y - selected.xform.cy;
       const startDist = Math.hypot(dx0, dy0) || 0.0001;
-      const startScale = xform.scale;
+      const startScale = selected.xform.scale;
       function move(ev){
         const cur = stagePointFromEvent(ev);
-        const dist = Math.hypot(cur.x - xform.cx, cur.y - xform.cy);
+        const dist = Math.hypot(cur.x - selected.xform.cx, cur.y - selected.xform.cy);
         let newScale = startScale * (dist / startDist);
         newScale = Math.max(0.02, Math.min(newScale, 60));
-        xform.scale = newScale;
-        updateImageTransform();
+        selected.xform.scale = newScale;
+        updateSelectedLayerTransform();
         syncZoomSlider();
       }
       function up(){
@@ -634,17 +726,18 @@
   (function attachRotateHandle(){
     const el = document.getElementById("handle-rotate");
     el.addEventListener("pointerdown", (e) => {
-      if (!img) return;
+      const selected = getSelectedLayer();
+      if (!selected) return;
       e.preventDefault();
       e.stopPropagation();
       const start = stagePointFromEvent(e);
-      const startAngle = Math.atan2(start.y - xform.cy, start.x - xform.cx) * 180/Math.PI;
-      const startRot = xform.rot;
+      const startAngle = Math.atan2(start.y - selected.xform.cy, start.x - selected.xform.cx) * 180/Math.PI;
+      const startRot = selected.xform.rot;
       function move(ev){
         const cur = stagePointFromEvent(ev);
-        const curAngle = Math.atan2(cur.y - xform.cy, cur.x - xform.cx) * 180/Math.PI;
-        xform.rot = startRot + (curAngle - startAngle);
-        updateImageTransform();
+        const curAngle = Math.atan2(cur.y - selected.xform.cy, cur.x - selected.xform.cx) * 180/Math.PI;
+        selected.xform.rot = startRot + (curAngle - startAngle);
+        updateSelectedLayerTransform();
         syncRotationSlider();
       }
       function up(){
@@ -658,48 +751,173 @@
 
   // ---- slider / control sync ----
   function syncZoomSlider(){
-    const pct = Math.round((xform.scale / fitScale) * 100);
+    const selected = getSelectedLayer();
+    if (!selected){
+      zoomRange.value = 100;
+      zoomLabel.textContent = "100%";
+      return;
+    }
+    const pct = Math.round((selected.xform.scale / (selected.fitScale || 1)) * 100);
     const clamped = Math.min(500, Math.max(20, pct));
     zoomRange.value = clamped;
     zoomLabel.textContent = pct + "%";
   }
   function syncRotationSlider(){
-    let r = ((xform.rot % 360) + 360) % 360;
+    const selected = getSelectedLayer();
+    if (!selected){
+      rotRange.value = 0;
+      rotLabel.textContent = "0°";
+      return;
+    }
+    let r = ((selected.xform.rot % 360) + 360) % 360;
     if (r > 180) r -= 360;
     rotRange.value = Math.round(r);
-    rotLabel.textContent = Math.round(xform.rot % 360) + "°";
+    rotLabel.textContent = Math.round(selected.xform.rot % 360) + "°";
   }
 
-  function setControlsEnabled(enabled){
-    fitBtn.disabled = !enabled;
-    removeImgBtn.disabled = !enabled;
-    zoomRange.disabled = !enabled;
-    rotRange.disabled = !enabled;
-    rotLeftBtn.disabled = !enabled;
-    rotRightBtn.disabled = !enabled;
-    downloadBtn.disabled = !enabled;
+  function updateControlsEnabled(){
+    const hasSelection = !!getSelectedLayer();
+    const hasLayers = layers.length > 0;
+    fitBtn.disabled = !hasSelection;
+    removeImgBtn.disabled = !hasSelection;
+    zoomRange.disabled = !hasSelection;
+    rotRange.disabled = !hasSelection;
+    rotLeftBtn.disabled = !hasSelection;
+    rotRightBtn.disabled = !hasSelection;
+    downloadBtn.disabled = !hasLayers;
+    downloadPngBtn.disabled = !hasLayers;
   }
 
-  // ---- events: image upload ----
-  imageInput.addEventListener("change", (e) => {
-    const file = e.target.files && e.target.files[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      const dataURL = ev.target.result;
-      const tmp = new Image();
-      tmp.onload = () => {
-        img = { naturalW: tmp.naturalWidth || 300, naturalH: tmp.naturalHeight || 300, dataURL };
-        if (bg) fitTransform();
+  // ---- layer list UI ----
+  function renderLayerList(){
+    layerListEl.innerHTML = "";
+    if (!layers.length){
+      const empty = document.createElement("div");
+      empty.className = "layer-empty";
+      empty.textContent = "No layers yet — add an image above.";
+      layerListEl.appendChild(empty);
+      return;
+    }
+    // top of list = front-most layer (rendered last / on top)
+    const topToBottom = layers.slice().reverse();
+    topToBottom.forEach((layer) => {
+      const li = document.createElement("li");
+      li.className = "layer-item" + (layer.id === selectedLayerId ? " active" : "");
+      li.draggable = true;
+      li.dataset.id = String(layer.id);
+
+      const handle = document.createElement("span");
+      handle.className = "layer-drag-handle";
+      handle.textContent = "⠿";
+      li.appendChild(handle);
+
+      const name = document.createElement("span");
+      name.className = "layer-name";
+      name.textContent = layer.name;
+      li.appendChild(name);
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "layer-remove";
+      removeBtn.title = "Remove layer";
+      removeBtn.textContent = "×";
+      removeBtn.addEventListener("click", (e) => {
+        e.stopPropagation();
+        removeLayer(layer.id);
+      });
+      li.appendChild(removeBtn);
+
+      li.addEventListener("click", () => selectLayer(layer.id));
+
+      li.addEventListener("dragstart", (e) => {
+        dragSrcLi = li;
+        li.classList.add("dragging");
+        e.dataTransfer.effectAllowed = "move";
+        try{ e.dataTransfer.setData("text/plain", li.dataset.id); }catch(err){ /* ignore */ }
+      });
+      li.addEventListener("dragover", (e) => {
+        e.preventDefault();
+        if (!dragSrcLi || dragSrcLi === li) return;
+        const rect = li.getBoundingClientRect();
+        const after = (e.clientY - rect.top) > rect.height/2;
+        li.parentNode.insertBefore(dragSrcLi, after ? li.nextSibling : li);
+      });
+      li.addEventListener("drop", (e) => {
+        e.preventDefault();
+      });
+      li.addEventListener("dragend", () => {
+        li.classList.remove("dragging");
+        dragSrcLi = null;
+        const idsTopToBottom = Array.from(layerListEl.children)
+          .filter((el) => el.dataset && el.dataset.id)
+          .map((el) => el.dataset.id);
+        const idsBottomToTop = idsTopToBottom.slice().reverse();
+        layers = idsBottomToTop
+          .map((id) => layers.find((l) => String(l.id) === id))
+          .filter(Boolean);
         buildStage();
-        updateHandles();
-        setControlsEnabled(true);
+      });
+
+      layerListEl.appendChild(li);
+    });
+  }
+
+  function selectLayer(id){
+    selectedLayerId = id;
+    renderLayerList();
+    buildStage();
+    syncZoomSlider();
+    syncRotationSlider();
+    updateControlsEnabled();
+  }
+
+  function removeLayer(id){
+    layers = layers.filter((l) => l.id !== id);
+    if (selectedLayerId === id){
+      selectedLayerId = layers.length ? layers[layers.length - 1].id : null;
+    }
+    renderLayerList();
+    buildStage();
+    syncZoomSlider();
+    syncRotationSlider();
+    updateControlsEnabled();
+  }
+
+  // ---- events: image upload (adds one layer per selected file) ----
+  imageInput.addEventListener("change", (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    files.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        const dataURL = ev.target.result;
+        const tmp = new Image();
+        tmp.onload = () => {
+          const layer = {
+            id: ++layerIdCounter,
+            name: file.name || ("Layer " + layerIdCounter),
+            naturalW: tmp.naturalWidth || 300,
+            naturalH: tmp.naturalHeight || 300,
+            dataURL,
+            xform: { cx:0, cy:0, scale:1, rot:0 },
+            fitScale: 1
+          };
+          layers.push(layer);
+          if (bg) fitTransform(layer);
+          selectedLayerId = layer.id;
+          renderLayerList();
+          buildStage();
+          syncZoomSlider();
+          syncRotationSlider();
+          updateControlsEnabled();
+        };
+        tmp.onerror = () => alert("Couldn't read " + (file.name || "that image") + ".");
+        tmp.src = dataURL;
       };
-      tmp.onerror = () => alert("Couldn't read that image file.");
-      tmp.src = dataURL;
-    };
-    reader.onerror = () => alert("Couldn't read that image file.");
-    reader.readAsDataURL(file);
+      reader.onerror = () => alert("Couldn't read " + (file.name || "that file") + ".");
+      reader.readAsDataURL(file);
+    });
+    imageInput.value = "";
   });
 
   // ---- events: shape select (built-in shapes) ----
@@ -712,42 +930,48 @@
 
   // ---- events: controls ----
   fitBtn.addEventListener("click", () => {
-    if (!img || !bg) return;
-    fitTransform();
-    updateImageTransform();
+    const selected = getSelectedLayer();
+    if (!selected || !bg) return;
+    fitTransform(selected);
+    updateSelectedLayerTransform();
+    syncZoomSlider();
+    syncRotationSlider();
   });
 
   removeImgBtn.addEventListener("click", () => {
-    img = null;
-    buildStage();
-    updateHandles();
-    setControlsEnabled(false);
+    const selected = getSelectedLayer();
+    if (!selected) return;
+    removeLayer(selected.id);
   });
 
   zoomRange.addEventListener("input", () => {
-    if (!img) return;
-    xform.scale = fitScale * (parseFloat(zoomRange.value) / 100);
+    const selected = getSelectedLayer();
+    if (!selected) return;
+    selected.xform.scale = (selected.fitScale || 1) * (parseFloat(zoomRange.value) / 100);
     zoomLabel.textContent = zoomRange.value + "%";
-    updateImageTransform();
+    updateSelectedLayerTransform();
   });
 
   rotRange.addEventListener("input", () => {
-    if (!img) return;
-    xform.rot = parseFloat(rotRange.value);
-    rotLabel.textContent = Math.round(xform.rot) + "°";
-    updateImageTransform();
+    const selected = getSelectedLayer();
+    if (!selected) return;
+    selected.xform.rot = parseFloat(rotRange.value);
+    rotLabel.textContent = Math.round(selected.xform.rot) + "°";
+    updateSelectedLayerTransform();
   });
 
   rotLeftBtn.addEventListener("click", () => {
-    if (!img) return;
-    xform.rot -= 15;
-    updateImageTransform();
+    const selected = getSelectedLayer();
+    if (!selected) return;
+    selected.xform.rot -= 15;
+    updateSelectedLayerTransform();
     syncRotationSlider();
   });
   rotRightBtn.addEventListener("click", () => {
-    if (!img) return;
-    xform.rot += 15;
-    updateImageTransform();
+    const selected = getSelectedLayer();
+    if (!selected) return;
+    selected.xform.rot += 15;
+    updateSelectedLayerTransform();
     syncRotationSlider();
   });
 
@@ -759,51 +983,62 @@
 
   // ---- rotate without the slider: shift + scroll wheel over the stage ----
   stageContainer.addEventListener("wheel", (e) => {
-    if (!img) return;
+    const selected = getSelectedLayer();
+    if (!selected) return;
     if (!e.shiftKey){
       // plain scroll still zooms, so scrolling the page doesn't get "stuck"
       return;
     }
     e.preventDefault();
     const step = e.deltaY > 0 ? 5 : -5;
-    xform.rot += step;
-    updateImageTransform();
+    selected.xform.rot += step;
+    updateSelectedLayerTransform();
     syncRotationSlider();
   }, { passive:false });
 
   // ---- rotate without the slider: [ and ] keys ----
   window.addEventListener("keydown", (e) => {
-    if (!img) return;
+    const selected = getSelectedLayer();
+    if (!selected) return;
     const tag = (document.activeElement && document.activeElement.tagName) || "";
     if (["INPUT","SELECT","TEXTAREA"].includes(tag)) return; // don't hijack typing/sliders
     if (e.key !== "[" && e.key !== "]") return;
     e.preventDefault();
     const step = e.shiftKey ? 15 : 1;
-    xform.rot += (e.key === "]" ? step : -step);
-    updateImageTransform();
+    selected.xform.rot += (e.key === "]" ? step : -step);
+    updateSelectedLayerTransform();
     syncRotationSlider();
   });
 
   window.addEventListener("resize", updateHandles);
   window.addEventListener("scroll", updateHandles, true);
 
-  // ---- export ----
-  function buildExportFilename(){
+  // ---- shared export helpers ----
+  function buildExportFilename(ext, suffix){
     const d = new Date();
     const pad = (n) => String(n).padStart(2, "0");
     const timestamp = `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
     const shapeSlug = (currentShapeLabel || "shape").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "");
-    return `${timestamp}-${shapeSlug}.jpg`;
+    const suffixPart = suffix ? `-${suffix}` : "";
+    return `${timestamp}-${shapeSlug}${suffixPart}.${ext}`;
   }
 
-  function exportJPG(){
-    if (!img || !bg){
-      alert("Upload an image first.");
-      return;
-    }
-    downloadBtn.disabled = true;
-    downloadBtn.textContent = "Preparing…";
+  function buildLayerGroup(layer){
+    const g = document.createElementNS(NS, "g");
+    g.setAttribute("transform", transformString(layer.xform));
+    const imageEl = document.createElementNS(NS, "image");
+    imageEl.setAttributeNS(XLINK, "href", layer.dataURL);
+    imageEl.setAttribute("href", layer.dataURL);
+    imageEl.setAttribute("x", -layer.naturalW/2);
+    imageEl.setAttribute("y", -layer.naturalH/2);
+    imageEl.setAttribute("width", layer.naturalW);
+    imageEl.setAttribute("height", layer.naturalH);
+    imageEl.setAttribute("preserveAspectRatio", "none");
+    g.appendChild(imageEl);
+    return g;
+  }
 
+  function buildClippedLayersSvg(){
     const outSvg = document.createElementNS(NS, "svg");
     outSvg.setAttribute("xmlns", NS);
     outSvg.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:xlink", XLINK);
@@ -824,80 +1059,158 @@
 
     const clipG = document.createElementNS(NS, "g");
     clipG.setAttribute("clip-path", "url(#exportClip)");
-    const moveG = document.createElementNS(NS, "g");
-    moveG.setAttribute("transform", `translate(${xform.cx} ${xform.cy}) rotate(${xform.rot}) scale(${xform.scale})`);
-    const imageEl = document.createElementNS(NS, "image");
-    imageEl.setAttributeNS(XLINK, "href", img.dataURL);
-    imageEl.setAttribute("href", img.dataURL);
-    imageEl.setAttribute("x", -img.naturalW/2);
-    imageEl.setAttribute("y", -img.naturalH/2);
-    imageEl.setAttribute("width", img.naturalW);
-    imageEl.setAttribute("height", img.naturalH);
-    imageEl.setAttribute("preserveAspectRatio", "none");
-    moveG.appendChild(imageEl);
-    clipG.appendChild(moveG);
+    layers.forEach((layer) => clipG.appendChild(buildLayerGroup(layer)));
     outSvg.appendChild(clipG);
 
+    return outSvg;
+  }
+
+  function layerCorners(layer){
+    const hw = layer.naturalW/2, hh = layer.naturalH/2;
+    const pts = [[-hw,-hh],[hw,-hh],[hw,hh],[-hw,hh]];
+    return pts.map(([lx, ly]) => localToStage(layer.xform, lx, ly));
+  }
+
+  function computeFullLayersBounds(){
+    let minX = 0, minY = 0, maxX = bg.w, maxY = bg.h;
+    layers.forEach((layer) => {
+      layerCorners(layer).forEach((p) => {
+        minX = Math.min(minX, p.x);
+        minY = Math.min(minY, p.y);
+        maxX = Math.max(maxX, p.x);
+        maxY = Math.max(maxY, p.y);
+      });
+    });
+    return { x:minX, y:minY, w:maxX-minX, h:maxY-minY };
+  }
+
+  function buildFullLayersSvg(bounds){
+    const outSvg = document.createElementNS(NS, "svg");
+    outSvg.setAttribute("xmlns", NS);
+    outSvg.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:xlink", XLINK);
+    outSvg.setAttribute("viewBox", `${bounds.x} ${bounds.y} ${bounds.w} ${bounds.h}`);
+    outSvg.setAttribute("width", bounds.w);
+    outSvg.setAttribute("height", bounds.h);
+
+    const bgGroup = document.createElementNS(NS, "g");
+    bg.bgClones.forEach((c) => bgGroup.appendChild(c.cloneNode(true)));
+    outSvg.appendChild(bgGroup);
+
+    layers.forEach((layer) => outSvg.appendChild(buildLayerGroup(layer)));
+
+    return outSvg;
+  }
+
+  function rasterizeSvgToBlob(outSvg, canvasW, canvasH, opts, cb){
     const svgString = new XMLSerializer().serializeToString(outSvg);
     let svg64;
     try{
       svg64 = btoa(unescape(encodeURIComponent(svgString)));
     }catch(e){
-      alert("Export failed while encoding the image.");
-      resetDownloadBtn();
+      cb(null, "Export failed while encoding the image.");
       return;
     }
     const dataUrl = "data:image/svg+xml;base64," + svg64;
 
-    const longSide = Math.max(bg.w, bg.h);
-    const exportScale = Math.max(1, Math.min(8, Math.round(2400 / longSide)));
     const canvas = document.createElement("canvas");
-    canvas.width = Math.max(1, Math.round(bg.w * exportScale));
-    canvas.height = Math.max(1, Math.round(bg.h * exportScale));
+    canvas.width = canvasW;
+    canvas.height = canvasH;
     const ctx = canvas.getContext("2d");
 
     const im = new Image();
     im.onload = () => {
-      // JPG has no transparency, so paint a white backdrop first
-      ctx.fillStyle = "#ffffff";
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      if (opts.background){
+        ctx.fillStyle = opts.background;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
       ctx.drawImage(im, 0, 0, canvas.width, canvas.height);
       canvas.toBlob((blob) => {
         if (!blob){
-          alert("Export failed while creating the JPG.");
-          resetDownloadBtn();
+          cb(null, "Export failed while creating the image.");
           return;
         }
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = buildExportFilename();
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 3000);
-        resetDownloadBtn();
-      }, "image/jpeg", 0.75);
+        cb(blob, null);
+      }, opts.mime, opts.quality);
     };
-    im.onerror = () => {
-      alert("Export failed while rendering the image. Try a different photo.");
-      resetDownloadBtn();
-    };
+    im.onerror = () => cb(null, "Export failed while rendering the image. Try different photos.");
     im.src = dataUrl;
   }
 
+  function triggerDownload(blob, filename){
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+  }
+
+  // ---- export: clipped JPG (what shows through the shape) ----
+  function exportJPG(){
+    if (!layers.length || !bg){
+      alert("Add at least one image layer first.");
+      return;
+    }
+    downloadBtn.disabled = true;
+    downloadBtn.textContent = "Preparing…";
+
+    const outSvg = buildClippedLayersSvg();
+    const longSide = Math.max(bg.w, bg.h);
+    const exportScale = Math.max(1, Math.min(8, Math.round(2400 / longSide)));
+    const canvasW = Math.max(1, Math.round(bg.w * exportScale));
+    const canvasH = Math.max(1, Math.round(bg.h * exportScale));
+
+    rasterizeSvgToBlob(outSvg, canvasW, canvasH, { background:"#ffffff", mime:"image/jpeg", quality:0.75 }, (blob, err) => {
+      if (err){ alert(err); resetDownloadBtn(); return; }
+      triggerDownload(blob, buildExportFilename("jpg"));
+      resetDownloadBtn();
+    });
+  }
+
   function resetDownloadBtn(){
-    downloadBtn.disabled = !img;
+    downloadBtn.disabled = layers.length === 0;
     downloadBtn.textContent = "Download JPG";
   }
 
+  // ---- export: full, unclipped layer stack as PNG, extended to cover every layer ----
+  function exportFullLayersPNG(){
+    if (!layers.length || !bg){
+      alert("Add at least one image layer first.");
+      return;
+    }
+    downloadPngBtn.disabled = true;
+    downloadPngBtn.textContent = "Preparing…";
+
+    const bounds = computeFullLayersBounds();
+    const outSvg = buildFullLayersSvg(bounds);
+    const longSide = Math.max(bounds.w, bounds.h);
+    const exportScale = Math.max(1, Math.min(8, Math.round(3000 / longSide)));
+    const canvasW = Math.max(1, Math.round(bounds.w * exportScale));
+    const canvasH = Math.max(1, Math.round(bounds.h * exportScale));
+
+    rasterizeSvgToBlob(outSvg, canvasW, canvasH, { background:null, mime:"image/png" }, (blob, err) => {
+      if (err){ alert(err); resetDownloadPngBtn(); return; }
+      triggerDownload(blob, buildExportFilename("png", "full-layers"));
+      resetDownloadPngBtn();
+    });
+  }
+
+  function resetDownloadPngBtn(){
+    downloadPngBtn.disabled = layers.length === 0;
+    downloadPngBtn.textContent = "Download Full Layers (PNG)";
+  }
+
   downloadBtn.addEventListener("click", exportJPG);
+  downloadPngBtn.addEventListener("click", exportFullLayersPNG);
 
   // ---- init ----
   shapeSelect.value = "left";
   currentShapeLabel = BUILTIN_SHAPES.left.label;
   parseAndLoadBackground(BUILTIN_SHAPES.left.svg);
-  setControlsEnabled(false);
+  renderLayerList();
+  updateControlsEnabled();
 })();
 </script>
 </body>
