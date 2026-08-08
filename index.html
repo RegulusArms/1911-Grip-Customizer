@@ -307,9 +307,8 @@
 
     <hr class="sep">
 
-    <button class="btn btn-primary" id="downloadBtn" disabled title="This is a mockup of the 1911 grips with your images positioned where you want them">Download JPG</button>
-    <button class="btn btn-primary" id="downloadPngBtn" disabled title="This is a full quality export of your images layed how you want them">Download Full Layers (PNG)</button>
-    <p class="download-note">Download both the JPG and PNG for each side of the PMAG (left and right), then email them to ross@regulusarms.com with your GunBroker order number as the subject line. You can send them as a zip file or as individual image attachments.</p>
+    <button class="btn btn-primary" id="downloadZipBtn" disabled title="Downloads a zip containing the JPG mockup, the full quality PNG layers, and your original uploaded images">Download ZIP</button>
+    <p class="download-note">Download the zip for each side of the PMAG (left and right), then email them to ross@regulusarms.com with your GunBroker order number as the subject line.</p>
   </aside>
 
   <main class="stage-wrap">
@@ -327,6 +326,7 @@
   </main>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script>
 (function(){
   "use strict";
@@ -387,8 +387,7 @@
   const rotLeftBtn = document.getElementById("rotLeftBtn");
   const rotRightBtn = document.getElementById("rotRightBtn");
   const guideCheckbox = document.getElementById("guideCheckbox");
-  const downloadBtn = document.getElementById("downloadBtn");
-  const downloadPngBtn = document.getElementById("downloadPngBtn");
+  const downloadZipBtn = document.getElementById("downloadZipBtn");
 
   // ---- layer helpers ----
   function getSelectedLayer(){
@@ -784,8 +783,7 @@
     rotRange.disabled = !hasSelection;
     rotLeftBtn.disabled = !hasSelection;
     rotRightBtn.disabled = !hasSelection;
-    downloadBtn.disabled = !hasLayers;
-    downloadPngBtn.disabled = !hasLayers;
+    downloadZipBtn.disabled = !hasLayers;
   }
 
   // ---- layer list UI ----
@@ -1147,63 +1145,105 @@
     setTimeout(() => URL.revokeObjectURL(url), 3000);
   }
 
-  // ---- export: clipped JPG (what shows through the shape) ----
-  function exportJPG(){
-    if (!layers.length || !bg){
-      alert("Add at least one image layer first.");
-      return;
-    }
-    downloadBtn.disabled = true;
-    downloadBtn.textContent = "Preparing…";
+  function dataURLtoBlob(dataURL){
+    const [header, base64] = dataURL.split(",");
+    const mime = (header.match(/data:(.*?);base64/) || [])[1] || "application/octet-stream";
+    const bin = atob(base64);
+    const bytes = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+    return new Blob([bytes], { type: mime });
+  }
 
+  function extFromMime(mime){
+    if (mime === "image/jpeg") return "jpg";
+    if (mime === "image/png") return "png";
+    if (mime === "image/webp") return "webp";
+    if (mime === "image/gif") return "gif";
+    return "bin";
+  }
+
+  function uniqueZipName(usedNames, name){
+    if (!usedNames.has(name)){
+      usedNames.add(name);
+      return name;
+    }
+    const dot = name.lastIndexOf(".");
+    const base = dot === -1 ? name : name.slice(0, dot);
+    const ext = dot === -1 ? "" : name.slice(dot);
+    let n = 2, candidate;
+    do{
+      candidate = `${base} (${n})${ext}`;
+      n++;
+    }while(usedNames.has(candidate));
+    usedNames.add(candidate);
+    return candidate;
+  }
+
+  // ---- export: clipped JPG (what shows through the shape) ----
+  function buildJPGBlob(cb){
     const outSvg = buildClippedLayersSvg();
     const longSide = Math.max(bg.w, bg.h);
     const exportScale = Math.max(1, Math.min(8, Math.round(2400 / longSide)));
     const canvasW = Math.max(1, Math.round(bg.w * exportScale));
     const canvasH = Math.max(1, Math.round(bg.h * exportScale));
-
-    rasterizeSvgToBlob(outSvg, canvasW, canvasH, { background:"#ffffff", mime:"image/jpeg", quality:0.75 }, (blob, err) => {
-      if (err){ alert(err); resetDownloadBtn(); return; }
-      triggerDownload(blob, buildExportFilename("jpg"));
-      resetDownloadBtn();
-    });
-  }
-
-  function resetDownloadBtn(){
-    downloadBtn.disabled = layers.length === 0;
-    downloadBtn.textContent = "Download JPG";
+    rasterizeSvgToBlob(outSvg, canvasW, canvasH, { background:"#ffffff", mime:"image/jpeg", quality:0.75 }, cb);
   }
 
   // ---- export: full, unclipped layer stack as PNG, extended to cover every layer ----
-  function exportFullLayersPNG(){
-    if (!layers.length || !bg){
-      alert("Add at least one image layer first.");
-      return;
-    }
-    downloadPngBtn.disabled = true;
-    downloadPngBtn.textContent = "Preparing…";
-
+  function buildFullLayersPNGBlob(cb){
     const bounds = computeFullLayersBounds();
     const outSvg = buildFullLayersSvg(bounds);
     const longSide = Math.max(bounds.w, bounds.h);
     const exportScale = Math.max(1, Math.min(8, Math.round(3000 / longSide)));
     const canvasW = Math.max(1, Math.round(bounds.w * exportScale));
     const canvasH = Math.max(1, Math.round(bounds.h * exportScale));
+    rasterizeSvgToBlob(outSvg, canvasW, canvasH, { background:null, mime:"image/png" }, cb);
+  }
 
-    rasterizeSvgToBlob(outSvg, canvasW, canvasH, { background:null, mime:"image/png" }, (blob, err) => {
-      if (err){ alert(err); resetDownloadPngBtn(); return; }
-      triggerDownload(blob, buildExportFilename("png", "full-layers"));
-      resetDownloadPngBtn();
+  // ---- export: zip containing the JPG mockup, full-layers PNG, and original uploads ----
+  function exportZip(){
+    if (!layers.length || !bg){
+      alert("Add at least one image layer first.");
+      return;
+    }
+    downloadZipBtn.disabled = true;
+    downloadZipBtn.textContent = "Preparing…";
+
+    buildJPGBlob((jpgBlob, jpgErr) => {
+      if (jpgErr){ alert(jpgErr); resetDownloadZipBtn(); return; }
+      buildFullLayersPNGBlob((pngBlob, pngErr) => {
+        if (pngErr){ alert(pngErr); resetDownloadZipBtn(); return; }
+
+        const zip = new JSZip();
+        zip.file(buildExportFilename("jpg"), jpgBlob);
+        zip.file(buildExportFilename("png", "full-layers"), pngBlob);
+
+        const originalsFolder = zip.folder("original-images");
+        const usedNames = new Set();
+        layers.forEach((layer) => {
+          const blob = dataURLtoBlob(layer.dataURL);
+          let name = layer.name || `layer.${extFromMime(blob.type)}`;
+          if (!/\.[a-z0-9]+$/i.test(name)) name += `.${extFromMime(blob.type)}`;
+          originalsFolder.file(uniqueZipName(usedNames, name), blob);
+        });
+
+        zip.generateAsync({ type: "blob" }).then((zipBlob) => {
+          triggerDownload(zipBlob, buildExportFilename("zip"));
+          resetDownloadZipBtn();
+        }).catch(() => {
+          alert("Export failed while creating the zip file.");
+          resetDownloadZipBtn();
+        });
+      });
     });
   }
 
-  function resetDownloadPngBtn(){
-    downloadPngBtn.disabled = layers.length === 0;
-    downloadPngBtn.textContent = "Download Full Layers (PNG)";
+  function resetDownloadZipBtn(){
+    downloadZipBtn.disabled = layers.length === 0;
+    downloadZipBtn.textContent = "Download ZIP";
   }
 
-  downloadBtn.addEventListener("click", exportJPG);
-  downloadPngBtn.addEventListener("click", exportFullLayersPNG);
+  downloadZipBtn.addEventListener("click", exportZip);
 
   // ---- init ----
   shapeSelect.value = "left";
