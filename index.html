@@ -73,6 +73,28 @@
     font-size:12.5px;
     width:100%;
   }
+  .dropzone{
+    border:2px dashed var(--panel-border);
+    border-radius:8px;
+    padding:18px 10px;
+    text-align:center;
+    font-size:12.5px;
+    color:var(--muted);
+    cursor:pointer;
+    transition:background .12s ease, border-color .12s ease;
+  }
+  .dropzone:hover{
+    background:#f7f9fc;
+    border-color:#c7cbd4;
+  }
+  .dropzone.dragover{
+    background:#eaf1fe;
+    border-color:var(--accent);
+    color:var(--text);
+  }
+  .dropzone strong{
+    color:var(--text);
+  }
   .btn{
     display:inline-flex;
     align-items:center;
@@ -259,7 +281,10 @@
 
     <div class="field">
       <label for="imageInput">Add image layer</label>
-      <input type="file" id="imageInput" accept="image/*" multiple>
+      <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Drop images here or click to browse">
+        <strong>Drag &amp; drop images here</strong><br>or click to browse — multiple images each become their own layer
+      </div>
+      <input type="file" id="imageInput" accept="image/*" multiple style="display:none;">
     </div>
 
     <div class="field">
@@ -376,6 +401,7 @@
   const stageContainer = document.getElementById("stageContainer");
   const handleLayer = document.getElementById("handleLayer");
   const imageInput = document.getElementById("imageInput");
+  const dropzone = document.getElementById("dropzone");
   const layerListEl = document.getElementById("layerList");
   const shapeSelect = document.getElementById("shapeSelect");
   const fitBtn = document.getElementById("fitBtn");
@@ -882,8 +908,8 @@
   }
 
   // ---- events: image upload (adds one layer per selected file) ----
-  imageInput.addEventListener("change", (e) => {
-    const files = Array.from(e.target.files || []);
+  function addImageFiles(fileList){
+    const files = Array.from(fileList || []).filter((f) => f.type && f.type.startsWith("image/"));
     if (!files.length) return;
     files.forEach((file) => {
       const reader = new FileReader();
@@ -915,7 +941,45 @@
       reader.onerror = () => alert("Couldn't read " + (file.name || "that file") + ".");
       reader.readAsDataURL(file);
     });
+  }
+
+  imageInput.addEventListener("change", (e) => {
+    addImageFiles(e.target.files);
     imageInput.value = "";
+  });
+
+  dropzone.addEventListener("click", () => imageInput.click());
+  dropzone.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " "){
+      e.preventDefault();
+      imageInput.click();
+    }
+  });
+  ["dragenter","dragover"].forEach((evt) => {
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropzone.classList.add("dragover");
+    });
+  });
+  ["dragleave","dragend"].forEach((evt) => {
+    dropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      dropzone.classList.remove("dragover");
+    });
+  });
+  dropzone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    dropzone.classList.remove("dragover");
+    addImageFiles(e.dataTransfer && e.dataTransfer.files);
+  });
+  // prevent the browser from navigating away if a file is dropped outside the dropzone
+  ["dragover","drop"].forEach((evt) => {
+    window.addEventListener(evt, (e) => {
+      if (e.target !== dropzone && !dropzone.contains(e.target)) e.preventDefault();
+    });
   });
 
   // ---- events: shape select (built-in shapes) ----
