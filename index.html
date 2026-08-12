@@ -328,6 +328,10 @@
         <option value="left">1911 Left</option>
         <option value="right">1911 Right</option>
       </select>
+      <div class="checkbox-row" style="margin-top:8px;">
+        <input type="checkbox" id="levelViewCheckbox">
+        <label for="levelViewCheckbox" style="margin:0;font-weight:400;">Level view (bottom parallel to ground)</label>
+      </div>
     </div>
 
     <hr class="sep">
@@ -395,6 +399,7 @@
   let showGuide = true;
   let currentShapeLabel = "";
   let dragSrcLi = null;
+  let levelView = false;      // display-only: show the shape rotated so its bottom edge is level
 
   // ---- dom refs ----
   const stage = document.getElementById("stage");
@@ -404,6 +409,7 @@
   const dropzone = document.getElementById("dropzone");
   const layerListEl = document.getElementById("layerList");
   const shapeSelect = document.getElementById("shapeSelect");
+  const levelViewCheckbox = document.getElementById("levelViewCheckbox");
   const fitBtn = document.getElementById("fitBtn");
   const removeImgBtn = document.getElementById("removeImgBtn");
   const zoomRange = document.getElementById("zoomRange");
@@ -422,6 +428,79 @@
 
   function transformString(xform){
     return `translate(${xform.cx} ${xform.cy}) rotate(${xform.rot}) scale(${xform.scale})`;
+  }
+
+  // ---- "level view": auto-detect the shape's near-horizontal bottom edge so it can be ----
+  // ---- displayed rotated flat, without hardcoding anything per-shape.                 ----
+  function convexHull(points){
+    const pts = points.slice().sort((a, b) => a.x - b.x || a.y - b.y);
+    const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+    const lower = [];
+    for (const p of pts){
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], p) <= 0) lower.pop();
+      lower.push(p);
+    }
+    const upper = [];
+    for (let k = pts.length - 1; k >= 0; k--){
+      const p = pts[k];
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], p) <= 0) upper.pop();
+      upper.push(p);
+    }
+    upper.pop(); lower.pop();
+    return lower.concat(upper);
+  }
+
+  // finds the convex-hull edge that reads as the shape's "bottom edge" (long, in the
+  // bottom half of the shape, already close to horizontal) and returns an SVG transform
+  // that rotates the shape level around it, then scales it to keep it fully in view.
+  function computeLevelTransform(points, bbox, w, h){
+    if (points.length < 3) return null;
+    const hull = convexHull(points);
+    if (hull.length < 2) return null;
+    const bboxH = bbox.y2 - bbox.y;
+    let best = null;
+    for (let i = 0; i < hull.length; i++){
+      const p1 = hull[i], p2 = hull[(i + 1) % hull.length];
+      const dx = p2.x - p1.x, dy = p2.y - p1.y;
+      const len = Math.hypot(dx, dy);
+      if (len < 1) continue;
+      let angleDeg = Math.atan2(dy, dx) * 180 / Math.PI;
+      if (angleDeg > 90) angleDeg -= 180;
+      if (angleDeg < -90) angleDeg += 180;
+      const midY = (p1.y + p2.y) / 2;
+      if (Math.abs(angleDeg) > 35) continue;          // not "slightly" tilted - skip
+      if (midY < bbox.y + bboxH * 0.5) continue;       // not in the bottom half - skip
+      const score = len + (midY - bbox.y);
+      if (!best || score > best.score) best = { angleDeg, score };
+    }
+    if (!best || Math.abs(best.angleDeg) < 0.5) return null;
+
+    const angle = -best.angleDeg;
+    const pivot = { x: (bbox.x + bbox.x2) / 2, y: (bbox.y + bbox.y2) / 2 };
+    const rad = angle * Math.PI / 180;
+    const cos = Math.cos(rad), sin = Math.sin(rad);
+    let rx = Infinity, ry = Infinity, rx2 = -Infinity, ry2 = -Infinity;
+    points.forEach((p) => {
+      const x = pivot.x + (p.x - pivot.x) * cos - (p.y - pivot.y) * sin;
+      const y = pivot.y + (p.x - pivot.x) * sin + (p.y - pivot.y) * cos;
+      if (x < rx) rx = x; if (x > rx2) rx2 = x;
+      if (y < ry) ry = y; if (y > ry2) ry2 = y;
+    });
+    const rotatedCenter = { x: (rx + rx2) / 2, y: (ry + ry2) / 2 };
+    const scale = Math.min(1, w / (rx2 - rx), h / (ry2 - ry)) * 0.99;
+    const viewCenter = { x: w / 2, y: h / 2 };
+
+    const str = `translate(${viewCenter.x} ${viewCenter.y}) scale(${scale}) ` +
+      `translate(${-rotatedCenter.x} ${-rotatedCenter.y}) rotate(${angle} ${pivot.x} ${pivot.y})`;
+
+    const g = document.createElementNS(NS, "g");
+    g.setAttribute("transform", str);
+    const matrix = g.transform.baseVal.consolidate().matrix;
+    return { str, matrix, matrixInv: matrix.inverse() };
+  }
+
+  function applyMatrix(m, pt){
+    return { x: m.a * pt.x + m.c * pt.y + m.e, y: m.b * pt.x + m.d * pt.y + m.f };
   }
 
   // ---- background parsing ----
@@ -469,6 +548,7 @@
     const bgClones = [];
     const clipClones = [];
     let clipBBox = null;
+    const hullPoints = [];
 
     allShapes.forEach((el) => {
       let cs;
@@ -511,6 +591,16 @@
             }
           }
         }catch(e){ /* ignore */ }
+        try{
+          const len = el.getTotalLength ? el.getTotalLength() : 0;
+          if (len > 0){
+            const steps = Math.max(24, Math.min(240, Math.ceil(len / 5)));
+            for (let s = 0; s <= steps; s++){
+              const pt = el.getPointAtLength((len * s) / steps);
+              hullPoints.push({ x: pt.x, y: pt.y });
+            }
+          }
+        }catch(e){ /* ignore */ }
       }
     });
 
@@ -533,8 +623,14 @@
     bg = {
       w, h, viewBox: vb,
       bgClones, clipClones,
-      clipBBoxRect: { x:clipBBox.x, y:clipBBox.y, w:clipBBox.x2-clipBBox.x, h:clipBBox.y2-clipBBox.y }
+      clipBBoxRect: { x:clipBBox.x, y:clipBBox.y, w:clipBBox.x2-clipBBox.x, h:clipBBox.y2-clipBBox.y },
+      levelTransform: computeLevelTransform(hullPoints, clipBBox, w, h)
     };
+    levelViewCheckbox.disabled = !bg.levelTransform;
+    if (!bg.levelTransform){
+      levelViewCheckbox.checked = false;
+      levelView = false;
+    }
 
     buildStage();
   }
@@ -562,10 +658,17 @@
     defs.appendChild(clipPath);
     stage.appendChild(defs);
 
+    // everything below is nested in levelGroup so the optional "level view" rotation
+    // (shape + clip mask + image layers + guide) moves together as one rigid unit
+    const levelGroup = document.createElementNS(NS, "g");
+    levelGroup.id = "levelGroup";
+    if (levelView && bg.levelTransform) levelGroup.setAttribute("transform", bg.levelTransform.str);
+    stage.appendChild(levelGroup);
+
     const bgGroup = document.createElementNS(NS, "g");
     bgGroup.id = "bgLayer";
     bg.bgClones.forEach((c) => bgGroup.appendChild(c.cloneNode(true)));
-    stage.appendChild(bgGroup);
+    levelGroup.appendChild(bgGroup);
 
     const clipG = document.createElementNS(NS, "g");
     clipG.setAttribute("clip-path", "url(#userClip)");
@@ -584,7 +687,7 @@
       layerG.appendChild(imageEl);
       clipG.appendChild(layerG);
     });
-    stage.appendChild(clipG);
+    levelGroup.appendChild(clipG);
 
     const selected = getSelectedLayer();
     if (selected){
@@ -607,7 +710,7 @@
       guideRect.style.cursor = "grab";
       guideRect.style.strokeOpacity = showGuide ? "1" : "0";
       guideG.appendChild(guideRect);
-      stage.appendChild(guideG);
+      levelGroup.appendChild(guideG);
     }
 
     updateHandles();
@@ -626,6 +729,10 @@
   }
 
   // ---- coordinate conversion ----
+  // all layer/background geometry (xform.cx/cy, clip shapes, etc.) lives in the
+  // background SVG's own, un-rotated coordinate space. When "level view" is on, that
+  // space is displayed through the extra levelGroup transform (see buildStage), so
+  // points coming from the mouse need to be converted back into that local space here.
   function stagePointFromEvent(evt){
     const pt = stage.createSVGPoint();
     pt.x = evt.clientX;
@@ -634,6 +741,7 @@
     if (!ctm) return { x:0, y:0 };
     const inv = ctm.inverse();
     const p = pt.matrixTransform(inv);
+    if (levelView && bg && bg.levelTransform) return applyMatrix(bg.levelTransform.matrixInv, p);
     return { x:p.x, y:p.y };
   }
 
@@ -664,15 +772,16 @@
       return;
     }
     handleLayer.style.display = "block";
+    const toDisplay = (p) => (levelView && bg && bg.levelTransform) ? applyMatrix(bg.levelTransform.matrix, p) : p;
     const hw = selected.naturalW/2, hh = selected.naturalH/2;
     const corners = {
-      tl: localToStage(selected.xform, -hw, -hh),
-      tr: localToStage(selected.xform, hw, -hh),
-      br: localToStage(selected.xform, hw, hh),
-      bl: localToStage(selected.xform, -hw, hh)
+      tl: toDisplay(localToStage(selected.xform, -hw, -hh)),
+      tr: toDisplay(localToStage(selected.xform, hw, -hh)),
+      br: toDisplay(localToStage(selected.xform, hw, hh)),
+      bl: toDisplay(localToStage(selected.xform, -hw, hh))
     };
     const rotLocalY = -hh - Math.max(selected.naturalW, selected.naturalH) * 0.14 - 10;
-    const rotStage = localToStage(selected.xform, 0, rotLocalY);
+    const rotStage = toDisplay(localToStage(selected.xform, 0, rotLocalY));
 
     placeHandle("handle-tl", corners.tl);
     placeHandle("handle-tr", corners.tr);
@@ -988,6 +1097,11 @@
     if (!shape) return;
     currentShapeLabel = shape.label;
     parseAndLoadBackground(shape.svg);
+  });
+
+  levelViewCheckbox.addEventListener("change", () => {
+    levelView = levelViewCheckbox.checked;
+    buildStage();
   });
 
   // ---- events: controls ----
