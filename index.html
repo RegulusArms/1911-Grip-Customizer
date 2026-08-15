@@ -4,6 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>1911 Grip Customizer</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto&family=Montserrat&family=Oswald&family=Bebas+Neue&family=Anton&family=Playfair+Display&family=Merriweather&family=Cinzel&family=Roboto+Mono&family=Dancing+Script&family=Pacifico&display=swap" rel="stylesheet">
 <style>
   :root{
     --panel-bg:#ffffff;
@@ -134,6 +137,68 @@
     align-items:center;
     gap:8px;
     font-size:13px;
+  }
+  textarea, select{
+    font-family:inherit;
+  }
+  .cmyk-row{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    margin-bottom:6px;
+  }
+  .cmyk-row label{
+    width:14px;
+    font-size:12px;
+    font-weight:600;
+    color:var(--text);
+    flex:0 0 auto;
+  }
+  .cmyk-row input[type="range"]{
+    flex:1 1 auto;
+  }
+  .cmyk-row span.val{
+    font-size:12px;
+    color:var(--muted);
+    width:38px;
+    text-align:right;
+    flex:0 0 auto;
+  }
+  .color-swatch{
+    width:24px;
+    height:24px;
+    border-radius:6px;
+    border:1px solid var(--panel-border);
+    flex:0 0 auto;
+  }
+  .color-wheel-wrap{
+    display:flex;
+    justify-content:center;
+    margin:4px 0 2px;
+  }
+  .color-wheel{
+    position:relative;
+    width:160px;
+    height:160px;
+    border-radius:50%;
+    background:
+      radial-gradient(circle, #fff 0%, rgba(255,255,255,0) 70%),
+      conic-gradient(red, yellow, lime, cyan, blue, magenta, red);
+    border:1px solid var(--panel-border);
+    cursor:crosshair;
+    touch-action:none;
+  }
+  .color-wheel-dot{
+    position:absolute;
+    left:50%;
+    top:50%;
+    width:16px;
+    height:16px;
+    border-radius:50%;
+    border:2px solid #fff;
+    box-shadow:0 1px 4px rgba(0,0,0,.45), 0 0 0 1px rgba(0,0,0,.25);
+    transform:translate(-50%,-50%);
+    pointer-events:none;
   }
   hr.sep{
     border:none;
@@ -278,7 +343,7 @@
 <div class="app">
   <aside class="panel">
     <h1>Grip Customizer</h1>
-    <p class="sub">Upload one or more images, then drag to move, use the corner handles to resize, and the top handle (or shift + scroll, or the [ ] keys) to rotate. Images only show through the colored area of the shape. Reorder layers by dragging them in the list below.</p>
+    <p class="sub">Upload one or more images or add text layers, then drag to move, use the corner handles to resize, and the top handle (or shift + scroll, or the [ ] keys) to rotate. Layers only show through the colored area of the shape. Reorder layers by dragging them in the list below.</p>
 
     <div class="field">
       <label for="imageInput">Add image layer</label>
@@ -286,6 +351,11 @@
         <strong>Drag &amp; drop images here</strong><br>or click to browse — multiple images each become their own layer
       </div>
       <input type="file" id="imageInput" accept="image/*" multiple style="display:none;">
+    </div>
+
+    <div class="field">
+      <label>Add text layer</label>
+      <button class="btn" id="addTextBtn" style="width:100%;">+ Add text</button>
     </div>
 
     <div class="field">
@@ -313,6 +383,42 @@
       <div class="btn-row" style="margin-top:8px;">
         <button class="btn" id="rotLeftBtn" disabled>⟲ 15°</button>
         <button class="btn" id="rotRightBtn" disabled>⟳ 15°</button>
+      </div>
+    </div>
+
+    <div id="textFieldsGroup" style="display:none;">
+      <div class="field">
+        <label for="textContentInput">Text content</label>
+        <textarea id="textContentInput" rows="2" style="width:100%;padding:7px 8px;font-size:13px;border-radius:8px;border:1px solid var(--panel-border);resize:vertical;"></textarea>
+      </div>
+
+      <div class="field">
+        <label for="fontSelect">Font</label>
+        <select id="fontSelect" style="width:100%;padding:7px 8px;font-size:13px;border-radius:8px;border:1px solid var(--panel-border);">
+          <optgroup label="Built-in fonts" id="builtinFontGroup"></optgroup>
+          <optgroup label="Custom fonts" id="customFontGroup"></optgroup>
+          <option value="__upload__">+ Upload custom font (.ttf/.otf)…</option>
+        </select>
+        <input type="file" id="fontFileInput" accept=".ttf,.otf,font/ttf,font/otf" style="display:none;">
+      </div>
+
+      <div class="field">
+        <label>Text color (CMYK)</label>
+        <div class="color-wheel-wrap">
+          <div class="color-wheel" id="colorWheel" role="slider" aria-label="Color hue and saturation" tabindex="0">
+            <div class="color-wheel-dot" id="colorWheelDot"></div>
+          </div>
+        </div>
+        <div class="cmyk-row" style="margin-top:10px;">
+          <label for="cmykK">K</label>
+          <input type="range" id="cmykK" min="0" max="100" value="100" step="1">
+          <span class="val" id="cmykKVal">100%</span>
+        </div>
+        <div class="row" style="margin-top:8px;">
+          <span style="font-size:12px;color:var(--muted);">Preview</span>
+          <span class="color-swatch" id="colorSwatch"></span>
+          <span id="cmykReadout" style="font-size:11px;color:var(--muted);margin-left:auto;"></span>
+        </div>
       </div>
     </div>
 
@@ -370,7 +476,7 @@
   <defs>
     <style>
       .cls-1 {
-        fill: #808285;
+        fill: #e3dac9;
       }
     </style>
   </defs>
@@ -382,7 +488,7 @@
   <defs>
     <style>
       .cls-1 {
-        fill: #6d6e71;
+        fill: #e3dac9;
       }
     </style>
   </defs>
@@ -394,7 +500,7 @@
   <defs>
     <style>
       .cls-1 {
-        fill: #6d6e71;
+        fill: #e3dac9;
       }
     </style>
   </defs>
@@ -406,7 +512,7 @@
   <defs>
     <style>
       .cls-1 {
-        fill: #808285;
+        fill: #e3dac9;
         stroke: #fff;
         stroke-miterlimit: 10;
       }
@@ -422,9 +528,30 @@
     "92fs-right": { label: "92FS Right", svg: SVG_92FS_RIGHT }
   };
 
+  const BASE_FONT_SIZE = 80;
+  // built-in fonts are loaded from Google Fonts (see <link> in <head>) rather than named
+  // OS system fonts — system font names like "Impact" or "Palatino Linotype" silently no-op
+  // on machines that don't have them installed, which is why some "built-in fonts" used to
+  // look identical no matter which one was picked. Google Fonts always renders the same
+  // everywhere. `google` is also the lookup key used to embed each one as a data URI for
+  // export (see ensureGoogleFontEmbedded) so rasterized JPG/PNG exports keep the right font.
+  const BUILTIN_FONTS = [
+    { value: `"Roboto", Arial, sans-serif`, label: "Roboto", google: "Roboto" },
+    { value: `"Montserrat", Arial, sans-serif`, label: "Montserrat", google: "Montserrat" },
+    { value: `"Oswald", Impact, sans-serif`, label: "Oswald (Condensed)", google: "Oswald" },
+    { value: `"Bebas Neue", Impact, sans-serif`, label: "Bebas Neue (Bold Display)", google: "Bebas Neue" },
+    { value: `"Anton", Impact, sans-serif`, label: "Anton (Heavy Display)", google: "Anton" },
+    { value: `"Playfair Display", Georgia, serif`, label: "Playfair Display", google: "Playfair Display" },
+    { value: `"Merriweather", Georgia, serif`, label: "Merriweather", google: "Merriweather" },
+    { value: `"Cinzel", Georgia, serif`, label: "Cinzel (Engraved)", google: "Cinzel" },
+    { value: `"Roboto Mono", "Courier New", monospace`, label: "Roboto Mono", google: "Roboto Mono" },
+    { value: `"Dancing Script", cursive`, label: "Dancing Script (Script)", google: "Dancing Script" },
+    { value: `"Pacifico", cursive`, label: "Pacifico (Casual Script)", google: "Pacifico" }
+  ];
+
   // ---- state ----
   let bg = null;              // { w, h, viewBox, bgClones, clipClones, clipBBoxRect }
-  let layers = [];             // [{ id, name, naturalW, naturalH, dataURL, xform:{cx,cy,scale,rot}, fitScale }]
+  let layers = [];             // [{ id, type:'image'|'text', name, naturalW, naturalH, xform:{cx,cy,scale,rot}, fitScale, ... }]
   let selectedLayerId = null;
   let layerIdCounter = 0;
   let showGuide = true;
@@ -433,6 +560,8 @@
   let levelView = false;      // display-only: show the shape rotated so its bottom edge is level
   const view = { scale: 1, tx: 0, ty: 0 }; // workspace pan/zoom (CSS transform on #stage, separate from layer xforms)
   const MIN_VIEW_SCALE = 0.25, MAX_VIEW_SCALE = 10;
+  let customFonts = {};        // familyName -> data URL
+  let customFontCounter = 0;
 
   // ---- dom refs ----
   const stage = document.getElementById("stage");
@@ -453,6 +582,19 @@
   const rotRightBtn = document.getElementById("rotRightBtn");
   const guideCheckbox = document.getElementById("guideCheckbox");
   const downloadZipBtn = document.getElementById("downloadZipBtn");
+  const addTextBtn = document.getElementById("addTextBtn");
+  const textFieldsGroup = document.getElementById("textFieldsGroup");
+  const textContentInput = document.getElementById("textContentInput");
+  const fontSelect = document.getElementById("fontSelect");
+  const fontFileInput = document.getElementById("fontFileInput");
+  const builtinFontGroup = document.getElementById("builtinFontGroup");
+  const customFontGroup = document.getElementById("customFontGroup");
+  const colorWheel = document.getElementById("colorWheel");
+  const colorWheelDot = document.getElementById("colorWheelDot");
+  const cmykK = document.getElementById("cmykK");
+  const cmykKVal = document.getElementById("cmykKVal");
+  const colorSwatch = document.getElementById("colorSwatch");
+  const cmykReadout = document.getElementById("cmykReadout");
 
   // ---- layer helpers ----
   function getSelectedLayer(){
@@ -461,6 +603,218 @@
 
   function transformString(xform){
     return `translate(${xform.cx} ${xform.cy}) rotate(${xform.rot}) scale(${xform.scale})`;
+  }
+
+  // ---- text layer helpers ----
+  function cmykToHex(c, m, y, k){
+    c/=100; m/=100; y/=100; k/=100;
+    const r = Math.round(255 * (1-c) * (1-k));
+    const g = Math.round(255 * (1-m) * (1-k));
+    const b = Math.round(255 * (1-y) * (1-k));
+    return "#" + [r,g,b].map((v) => Math.max(0, Math.min(255, v)).toString(16).padStart(2, "0")).join("");
+  }
+
+  // ---- color wheel (hue/saturation, at full value) <-> CMY, matched to the wheel's ----
+  // ---- CSS conic-gradient which starts at the top (hue 0) and sweeps clockwise.     ----
+  function hsvToRgb(h, s, v){
+    h = ((h % 360) + 360) % 360;
+    const c = v * s;
+    const x = c * (1 - Math.abs((h / 60) % 2 - 1));
+    const m = v - c;
+    let r, g, b;
+    if (h < 60){ r=c; g=x; b=0; }
+    else if (h < 120){ r=x; g=c; b=0; }
+    else if (h < 180){ r=0; g=c; b=x; }
+    else if (h < 240){ r=0; g=x; b=c; }
+    else if (h < 300){ r=x; g=0; b=c; }
+    else { r=c; g=0; b=x; }
+    return { r: r+m, g: g+m, b: b+m };
+  }
+
+  function rgbToHsv(r, g, b){
+    const max = Math.max(r, g, b), min = Math.min(r, g, b);
+    const d = max - min;
+    let h = 0;
+    if (d !== 0){
+      if (max === r) h = 60 * (((g - b) / d) % 6);
+      else if (max === g) h = 60 * ((b - r) / d + 2);
+      else h = 60 * ((r - g) / d + 4);
+    }
+    if (h < 0) h += 360;
+    const s = max === 0 ? 0 : d / max;
+    return { h, s, v: max };
+  }
+
+  function positionWheelDot(hue, sat){
+    const rad = hue * Math.PI / 180;
+    const x = 50 + sat * 50 * Math.sin(rad);
+    const y = 50 - sat * 50 * Math.cos(rad);
+    colorWheelDot.style.left = x + "%";
+    colorWheelDot.style.top = y + "%";
+  }
+
+  function updateColorReadout(layer){
+    const c = Math.round(layer.color.c), m = Math.round(layer.color.m), y = Math.round(layer.color.y), k = Math.round(layer.color.k);
+    cmykReadout.textContent = `C${c} M${m} Y${y} K${k}`;
+    colorSwatch.style.background = layer.fillColor;
+  }
+
+  function setColorFromWheel(hue, sat){
+    const selected = getSelectedLayer();
+    if (!selected || selected.type !== "text") return;
+    const rgb = hsvToRgb(hue, sat, 1);
+    const c = (1 - rgb.r) * 100, m = (1 - rgb.g) * 100, y = (1 - rgb.b) * 100;
+    const k = parseFloat(cmykK.value);
+    selected.color = { c, m, y, k };
+    selected.fillColor = cmykToHex(c, m, y, k);
+    positionWheelDot(hue, sat);
+    updateColorReadout(selected);
+    buildStage();
+  }
+
+  function wheelPointFromEvent(e){
+    const rect = colorWheel.getBoundingClientRect();
+    const cx = rect.left + rect.width / 2, cy = rect.top + rect.height / 2;
+    const R = rect.width / 2;
+    let dx = e.clientX - cx, dy = e.clientY - cy;
+    let r = Math.hypot(dx, dy);
+    if (r > R && r > 0){ dx = dx * R / r; dy = dy * R / r; r = R; }
+    const sat = R === 0 ? 0 : r / R;
+    let hue = Math.atan2(dx, -dy) * 180 / Math.PI;
+    if (hue < 0) hue += 360;
+    return { hue, sat };
+  }
+
+  function createTextElement(layer){
+    const textEl = document.createElementNS(NS, "text");
+    textEl.setAttribute("x", "0");
+    textEl.setAttribute("text-anchor", "middle");
+    textEl.setAttribute("font-family", layer.fontFamily);
+    textEl.setAttribute("font-size", String(BASE_FONT_SIZE));
+    textEl.setAttribute("fill", layer.fillColor);
+    textEl.setAttribute("style", "white-space:pre;");
+    const lines = (layer.text || "").split("\n");
+    lines.forEach((line, i) => {
+      const tspan = document.createElementNS(NS, "tspan");
+      tspan.setAttribute("x", "0");
+      if (i > 0) tspan.setAttribute("dy", "1.2em");
+      tspan.textContent = line.length ? line : " ";
+      textEl.appendChild(tspan);
+    });
+    return textEl;
+  }
+
+  function createTextGroup(layer){
+    const g = document.createElementNS(NS, "g");
+    g.setAttribute("transform", `translate(${-(layer.textOffsetX||0)} ${-(layer.textOffsetY||0)})`);
+    g.appendChild(createTextElement(layer));
+    return g;
+  }
+
+  // measures a text layer's rendered bounding box at BASE_FONT_SIZE so its handles/guide
+  // can use naturalW/naturalH exactly like an image layer's pixel dimensions do.
+  function measureTextLayer(layer){
+    const hidden = document.createElement("div");
+    hidden.style.cssText = "position:absolute;left:-99999px;top:0;width:0;height:0;overflow:hidden;";
+    document.body.appendChild(hidden);
+    const svg = document.createElementNS(NS, "svg");
+    hidden.appendChild(svg);
+    const textEl = createTextElement(layer);
+    svg.appendChild(textEl);
+    let bbox;
+    try{ bbox = textEl.getBBox(); }catch(e){ bbox = { x:0, y:0, width:10, height:10 }; }
+    document.body.removeChild(hidden);
+    layer.naturalW = Math.max(1, bbox.width);
+    layer.naturalH = Math.max(1, bbox.height);
+    layer.textOffsetX = bbox.x + bbox.width/2;
+    layer.textOffsetY = bbox.y + bbox.height/2;
+  }
+
+  // ---- custom font handling ----
+  function injectFontFaceStyle(){
+    let styleEl = document.getElementById("customFontFaceStyle");
+    if (!styleEl){
+      styleEl = document.createElement("style");
+      styleEl.id = "customFontFaceStyle";
+      document.head.appendChild(styleEl);
+    }
+    styleEl.textContent = Object.keys(customFonts).map((name) =>
+      `@font-face{font-family:"${name}";src:url(${customFonts[name]});}`
+    ).join("\n");
+  }
+
+  // builds an SVG <style> with the same @font-face rules so exported/rasterized SVGs
+  // (rendered outside this document) stay self-contained and keep using the right font.
+  function buildFontFaceDefsStyle(){
+    const names = Object.keys(customFonts);
+    if (!names.length) return null;
+    const styleEl = document.createElementNS(NS, "style");
+    styleEl.textContent = names.map((name) =>
+      `@font-face{font-family:"${name}";src:url(${customFonts[name]});}`
+    ).join("\n");
+    return styleEl;
+  }
+
+  function registerCustomFont(familyName, dataURL){
+    customFonts[familyName] = dataURL;
+    injectFontFaceStyle();
+  }
+
+  function addCustomFontOption(value, label){
+    const opt = document.createElement("option");
+    opt.value = value;
+    opt.textContent = label;
+    customFontGroup.appendChild(opt);
+  }
+
+  function loadFontAndThen(familyName, cb){
+    if (document.fonts && document.fonts.load){
+      document.fonts.load(`16px "${familyName}"`).then(() => cb()).catch(() => cb());
+    } else {
+      setTimeout(cb, 50);
+    }
+  }
+
+  // ---- embedding built-in Google Fonts as data URIs ----
+  // the <link> stylesheet in <head> covers the live editor, but exported/rasterized SVGs
+  // are rendered in an isolated context that can't see page stylesheets — only fonts baked
+  // into the SVG's own @font-face (via customFonts) survive export, same as uploaded fonts.
+  function fetchGoogleFontDataURI(family){
+    const q = encodeURIComponent(family).replace(/%20/g, "+");
+    return fetch(`https://fonts.googleapis.com/css2?family=${q}&display=swap`)
+      .then((r) => r.text())
+      .then((cssText) => {
+        const match = cssText.match(/src:\s*url\(([^)]+)\)\s*format\('woff2'\)/) || cssText.match(/src:\s*url\(([^)]+)\)/);
+        if (!match) throw new Error("No font file URL found for " + family);
+        return fetch(match[1]).then((r) => r.blob());
+      })
+      .then((blob) => new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => resolve(reader.result);
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      }));
+  }
+
+  const googleFontEmbedPromises = {};
+  function ensureGoogleFontEmbedded(familyName){
+    if (customFonts[familyName]) return Promise.resolve();
+    if (googleFontEmbedPromises[familyName]) return googleFontEmbedPromises[familyName];
+    const p = fetchGoogleFontDataURI(familyName)
+      .then((dataURL) => {
+        registerCustomFont(familyName, dataURL);
+        let changed = false;
+        layers.forEach((l) => {
+          if (l.type === "text" && l.fontFamily.indexOf(`"${familyName}"`) !== -1){
+            measureTextLayer(l);
+            changed = true;
+          }
+        });
+        if (changed) buildStage();
+      })
+      .catch((err) => { console.warn("Could not embed font for export:", familyName, err); });
+    googleFontEmbedPromises[familyName] = p;
+    return p;
   }
 
   // ---- "level view": auto-detect the shape's near-horizontal bottom edge so it can be ----
@@ -690,6 +1044,8 @@
     clipPath.id = "userClip";
     bg.clipClones.forEach((c) => clipPath.appendChild(c.cloneNode(true)));
     defs.appendChild(clipPath);
+    const fontStyle = buildFontFaceDefsStyle();
+    if (fontStyle) defs.appendChild(fontStyle);
     stage.appendChild(defs);
 
     // everything below is nested in levelGroup so the optional "level view" rotation
@@ -710,15 +1066,7 @@
       const layerG = document.createElementNS(NS, "g");
       layerG.id = "layerGroup-" + layer.id;
       layerG.setAttribute("transform", transformString(layer.xform));
-      const imageEl = document.createElementNS(NS, "image");
-      imageEl.setAttributeNS(XLINK, "href", layer.dataURL);
-      imageEl.setAttribute("href", layer.dataURL);
-      imageEl.setAttribute("x", -layer.naturalW/2);
-      imageEl.setAttribute("y", -layer.naturalH/2);
-      imageEl.setAttribute("width", layer.naturalW);
-      imageEl.setAttribute("height", layer.naturalH);
-      imageEl.setAttribute("preserveAspectRatio", "none");
-      layerG.appendChild(imageEl);
+      layerG.appendChild(buildLayerVisual(layer));
       clipG.appendChild(layerG);
     });
     levelGroup.appendChild(clipG);
@@ -1013,7 +1361,9 @@
 
       const name = document.createElement("span");
       name.className = "layer-name";
-      name.textContent = layer.name;
+      name.textContent = layer.type === "text"
+        ? ("🔤 " + ((layer.text || "Text").split("\n")[0].slice(0, 24) || "Text"))
+        : layer.name;
       li.appendChild(name);
 
       const removeBtn = document.createElement("button");
@@ -1069,6 +1419,7 @@
     syncZoomSlider();
     syncRotationSlider();
     updateControlsEnabled();
+    syncTextControls();
   }
 
   function removeLayer(id){
@@ -1081,6 +1432,49 @@
     syncZoomSlider();
     syncRotationSlider();
     updateControlsEnabled();
+    syncTextControls();
+  }
+
+  // ---- text layer controls: populate the panel from the selected layer, or hide it ----
+  function syncTextControls(){
+    const selected = getSelectedLayer();
+    const isText = !!selected && selected.type === "text";
+    textFieldsGroup.style.display = isText ? "" : "none";
+    if (!isText) return;
+    if (document.activeElement !== textContentInput) textContentInput.value = selected.text;
+    fontSelect.value = selected.fontFamily;
+    const rgb = { r: 1 - selected.color.c/100, g: 1 - selected.color.m/100, b: 1 - selected.color.y/100 };
+    const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+    positionWheelDot(hsv.h, hsv.s);
+    cmykK.value = selected.color.k;
+    cmykKVal.textContent = selected.color.k + "%";
+    updateColorReadout(selected);
+  }
+
+  function addTextLayer(){
+    const cx = bg ? bg.clipBBoxRect.x + bg.clipBBoxRect.w/2 : 0;
+    const cy = bg ? bg.clipBBoxRect.y + bg.clipBBoxRect.h/2 : 0;
+    const layer = {
+      id: ++layerIdCounter,
+      type: "text",
+      text: "Your Text",
+      fontFamily: BUILTIN_FONTS[0].value,
+      color: { c:0, m:0, y:0, k:100 },
+      fillColor: cmykToHex(0, 0, 0, 100),
+      xform: { cx, cy, scale:1, rot:0 },
+      fitScale: 1
+    };
+    measureTextLayer(layer);
+    layers.push(layer);
+    selectedLayerId = layer.id;
+    renderLayerList();
+    buildStage();
+    syncZoomSlider();
+    syncRotationSlider();
+    updateControlsEnabled();
+    syncTextControls();
+    textContentInput.focus();
+    textContentInput.select();
   }
 
   // ---- events: image upload (adds one layer per selected file) ----
@@ -1095,6 +1489,7 @@
         tmp.onload = () => {
           const layer = {
             id: ++layerIdCounter,
+            type: "image",
             name: file.name || ("Layer " + layerIdCounter),
             naturalW: tmp.naturalWidth || 300,
             naturalH: tmp.naturalHeight || 300,
@@ -1110,6 +1505,7 @@
           syncZoomSlider();
           syncRotationSlider();
           updateControlsEnabled();
+          syncTextControls();
         };
         tmp.onerror = () => alert("Couldn't read " + (file.name || "that image") + ".");
         tmp.src = dataURL;
@@ -1156,6 +1552,89 @@
     window.addEventListener(evt, (e) => {
       if (e.target !== dropzone && !dropzone.contains(e.target)) e.preventDefault();
     });
+  });
+
+  // ---- events: text layers ----
+  addTextBtn.addEventListener("click", addTextLayer);
+
+  textContentInput.addEventListener("input", () => {
+    const selected = getSelectedLayer();
+    if (!selected || selected.type !== "text") return;
+    selected.text = textContentInput.value;
+    measureTextLayer(selected);
+    buildStage();
+    renderLayerList();
+  });
+
+  fontSelect.addEventListener("change", () => {
+    if (fontSelect.value === "__upload__"){
+      syncTextControls();
+      fontFileInput.click();
+      return;
+    }
+    const selected = getSelectedLayer();
+    if (!selected || selected.type !== "text") return;
+    selected.fontFamily = fontSelect.value;
+    measureTextLayer(selected);
+    buildStage();
+  });
+
+  fontFileInput.addEventListener("change", (e) => {
+    const file = e.target.files && e.target.files[0];
+    fontFileInput.value = "";
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      const dataURL = ev.target.result;
+      const baseName = (file.name || "CustomFont").replace(/\.[^.]+$/, "");
+      const familyName = "UserFont" + (++customFontCounter) + "-" + baseName.replace(/[^a-z0-9]+/gi, "").slice(0, 24);
+      registerCustomFont(familyName, dataURL);
+      addCustomFontOption(familyName, baseName + " (custom)");
+      loadFontAndThen(familyName, () => {
+        const selected = getSelectedLayer();
+        if (selected && selected.type === "text"){
+          selected.fontFamily = familyName;
+          fontSelect.value = familyName;
+          measureTextLayer(selected);
+          buildStage();
+        }
+      });
+    };
+    reader.onerror = () => alert("Couldn't read that font file.");
+    reader.readAsDataURL(file);
+  });
+
+  colorWheel.addEventListener("pointerdown", (e) => {
+    const selected = getSelectedLayer();
+    if (!selected || selected.type !== "text") return;
+    e.preventDefault();
+    colorWheel.setPointerCapture(e.pointerId);
+    const apply = (ev) => {
+      const { hue, sat } = wheelPointFromEvent(ev);
+      setColorFromWheel(hue, sat);
+    };
+    apply(e);
+    function move(ev){ if (ev.pointerId === e.pointerId) apply(ev); }
+    function up(ev){
+      if (ev.pointerId !== e.pointerId) return;
+      colorWheel.removeEventListener("pointermove", move);
+      colorWheel.removeEventListener("pointerup", up);
+      colorWheel.removeEventListener("pointercancel", up);
+    }
+    colorWheel.addEventListener("pointermove", move);
+    colorWheel.addEventListener("pointerup", up);
+    colorWheel.addEventListener("pointercancel", up);
+  });
+
+  cmykK.addEventListener("input", () => {
+    const selected = getSelectedLayer();
+    if (!selected || selected.type !== "text") return;
+    const k = parseFloat(cmykK.value);
+    selected.color.k = k;
+    selected.fillColor = cmykToHex(selected.color.c, selected.color.m, selected.color.y, k);
+    cmykKVal.textContent = k + "%";
+    updateColorReadout(selected);
+    buildStage();
   });
 
   // ---- events: shape select (built-in shapes) ----
@@ -1299,9 +1778,8 @@
     return `${timestamp}-${shapeSlug}${suffixPart}.${ext}`;
   }
 
-  function buildLayerGroup(layer){
-    const g = document.createElementNS(NS, "g");
-    g.setAttribute("transform", transformString(layer.xform));
+  function buildLayerVisual(layer){
+    if (layer.type === "text") return createTextGroup(layer);
     const imageEl = document.createElementNS(NS, "image");
     imageEl.setAttributeNS(XLINK, "href", layer.dataURL);
     imageEl.setAttribute("href", layer.dataURL);
@@ -1310,7 +1788,13 @@
     imageEl.setAttribute("width", layer.naturalW);
     imageEl.setAttribute("height", layer.naturalH);
     imageEl.setAttribute("preserveAspectRatio", "none");
-    g.appendChild(imageEl);
+    return imageEl;
+  }
+
+  function buildLayerGroup(layer){
+    const g = document.createElementNS(NS, "g");
+    g.setAttribute("transform", transformString(layer.xform));
+    g.appendChild(buildLayerVisual(layer));
     return g;
   }
 
@@ -1327,6 +1811,8 @@
     clipPath.id = "exportClip";
     bg.clipClones.forEach((c) => clipPath.appendChild(c.cloneNode(true)));
     defs.appendChild(clipPath);
+    const fontStyle1 = buildFontFaceDefsStyle();
+    if (fontStyle1) defs.appendChild(fontStyle1);
     outSvg.appendChild(defs);
 
     const bgGroup = document.createElementNS(NS, "g");
@@ -1368,9 +1854,12 @@
     outSvg.setAttribute("width", bounds.w);
     outSvg.setAttribute("height", bounds.h);
 
-    const bgGroup = document.createElementNS(NS, "g");
-    bg.bgClones.forEach((c) => bgGroup.appendChild(c.cloneNode(true)));
-    outSvg.appendChild(bgGroup);
+    const fontStyle2 = buildFontFaceDefsStyle();
+    if (fontStyle2){
+      const defs = document.createElementNS(NS, "defs");
+      defs.appendChild(fontStyle2);
+      outSvg.appendChild(defs);
+    }
 
     layers.forEach((layer) => outSvg.appendChild(buildLayerGroup(layer)));
 
@@ -1487,30 +1976,45 @@
     downloadZipBtn.disabled = true;
     downloadZipBtn.textContent = "Preparing…";
 
-    buildJPGBlob((jpgBlob, jpgErr) => {
-      if (jpgErr){ alert(jpgErr); resetDownloadZipBtn(); return; }
-      buildFullLayersPNGBlob((pngBlob, pngErr) => {
-        if (pngErr){ alert(pngErr); resetDownloadZipBtn(); return; }
+    // make sure every Google Font actually used by a text layer is embedded as a data URI
+    // before rasterizing — otherwise the isolated export context can't fetch it and the
+    // JPG/PNG would silently fall back to a generic font.
+    const neededFamilies = new Set();
+    layers.forEach((l) => {
+      if (l.type !== "text") return;
+      const def = BUILTIN_FONTS.find((f) => f.value === l.fontFamily);
+      if (def && def.google) neededFamilies.add(def.google);
+    });
 
-        const zip = new JSZip();
-        zip.file(buildExportFilename("jpg"), jpgBlob);
-        zip.file(buildExportFilename("png", "full-layers"), pngBlob);
+    Promise.all(Array.from(neededFamilies).map(ensureGoogleFontEmbedded)).then(() => {
+      buildJPGBlob((jpgBlob, jpgErr) => {
+        if (jpgErr){ alert(jpgErr); resetDownloadZipBtn(); return; }
+        buildFullLayersPNGBlob((pngBlob, pngErr) => {
+          if (pngErr){ alert(pngErr); resetDownloadZipBtn(); return; }
 
-        const originalsFolder = zip.folder("original-images");
-        const usedNames = new Set();
-        layers.forEach((layer) => {
-          const blob = dataURLtoBlob(layer.dataURL);
-          let name = layer.name || `layer.${extFromMime(blob.type)}`;
-          if (!/\.[a-z0-9]+$/i.test(name)) name += `.${extFromMime(blob.type)}`;
-          originalsFolder.file(uniqueZipName(usedNames, name), blob);
-        });
+          const zip = new JSZip();
+          zip.file(buildExportFilename("jpg"), jpgBlob);
+          zip.file(buildExportFilename("png", "full-layers"), pngBlob);
 
-        zip.generateAsync({ type: "blob" }).then((zipBlob) => {
-          triggerDownload(zipBlob, buildExportFilename("zip"));
-          resetDownloadZipBtn();
-        }).catch(() => {
-          alert("Export failed while creating the zip file.");
-          resetDownloadZipBtn();
+          const imageLayers = layers.filter((l) => l.type !== "text");
+          if (imageLayers.length){
+            const originalsFolder = zip.folder("original-images");
+            const usedNames = new Set();
+            imageLayers.forEach((layer) => {
+              const blob = dataURLtoBlob(layer.dataURL);
+              let name = layer.name || `layer.${extFromMime(blob.type)}`;
+              if (!/\.[a-z0-9]+$/i.test(name)) name += `.${extFromMime(blob.type)}`;
+              originalsFolder.file(uniqueZipName(usedNames, name), blob);
+            });
+          }
+
+          zip.generateAsync({ type: "blob" }).then((zipBlob) => {
+            triggerDownload(zipBlob, buildExportFilename("zip"));
+            resetDownloadZipBtn();
+          }).catch(() => {
+            alert("Export failed while creating the zip file.");
+            resetDownloadZipBtn();
+          });
         });
       });
     });
@@ -1524,11 +2028,20 @@
   downloadZipBtn.addEventListener("click", exportZip);
 
   // ---- init ----
+  BUILTIN_FONTS.forEach((f) => {
+    const opt = document.createElement("option");
+    opt.value = f.value;
+    opt.textContent = f.label;
+    builtinFontGroup.appendChild(opt);
+    if (f.google) ensureGoogleFontEmbedded(f.google); // warm the export cache up front
+  });
+
   shapeSelect.value = "left";
   currentShapeLabel = BUILTIN_SHAPES.left.label;
   parseAndLoadBackground(BUILTIN_SHAPES.left.svg);
   renderLayerList();
   updateControlsEnabled();
+  syncTextControls();
 })();
 </script>
 </body>
