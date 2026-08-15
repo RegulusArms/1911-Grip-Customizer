@@ -26,7 +26,7 @@
   }
   .app{
     display:flex;
-    min-height:100vh;
+    height:100vh;
     align-items:stretch;
   }
   .panel{
@@ -36,6 +36,7 @@
     border-right:1px solid var(--panel-border);
     padding:20px 18px;
     overflow-y:auto;
+    min-height:0;
   }
   .panel h1{
     font-size:17px;
@@ -326,6 +327,27 @@
     background:var(--accent);
     border-color:#fff;
   }
+  .handle.edge{
+    border-radius:4px;
+    background:var(--accent);
+    border-color:#fff;
+  }
+  .handle.edge-h{
+    width:10px;
+    height:18px;
+  }
+  .handle.edge-v{
+    width:18px;
+    height:10px;
+  }
+  .shape-btn-grid{
+    display:grid;
+    grid-template-columns:1fr 1fr;
+    gap:6px;
+  }
+  .shape-btn-grid .btn{
+    width:100%;
+  }
   .hint{
     font-size:12.5px;
     color:var(--muted);
@@ -333,8 +355,8 @@
     max-width:420px;
   }
   @media (max-width:760px){
-    .app{flex-direction:column;}
-    .panel{width:auto;flex:none;border-right:none;border-bottom:1px solid var(--panel-border);}
+    .app{flex-direction:column;height:auto;min-height:100vh;}
+    .panel{width:auto;flex:none;border-right:none;border-bottom:1px solid var(--panel-border);overflow-y:visible;max-height:none;}
     .stage-container{height:80vh;}
   }
 </style>
@@ -356,6 +378,18 @@
     <div class="field">
       <label>Add text layer</label>
       <button class="btn" id="addTextBtn" style="width:100%;">+ Add text</button>
+    </div>
+
+    <div class="field">
+      <label>Add shape layer</label>
+      <div class="shape-btn-grid">
+        <button class="btn" data-shape-kind="star">★ Star</button>
+        <button class="btn" data-shape-kind="rectangle">▭ Rectangle</button>
+        <button class="btn" data-shape-kind="square">■ Square</button>
+        <button class="btn" data-shape-kind="ellipse">⬭ Ellipse</button>
+        <button class="btn" data-shape-kind="circle">● Circle</button>
+        <button class="btn" data-shape-kind="line">— Line</button>
+      </div>
     </div>
 
     <div class="field">
@@ -386,24 +420,40 @@
       </div>
     </div>
 
-    <div id="textFieldsGroup" style="display:none;">
-      <div class="field">
-        <label for="textContentInput">Text content</label>
-        <textarea id="textContentInput" rows="2" style="width:100%;padding:7px 8px;font-size:13px;border-radius:8px;border:1px solid var(--panel-border);resize:vertical;"></textarea>
+    <div class="field">
+      <label for="opacityRange">Opacity <span id="opacityLabel" style="font-weight:400;color:var(--muted);">100%</span></label>
+      <div class="row">
+        <input type="range" id="opacityRange" min="0" max="100" value="100" step="1" disabled>
       </div>
+    </div>
 
+    <div id="shapeFieldsGroup" style="display:none;">
       <div class="field">
-        <label for="fontSelect">Font</label>
-        <select id="fontSelect" style="width:100%;padding:7px 8px;font-size:13px;border-radius:8px;border:1px solid var(--panel-border);">
-          <optgroup label="Built-in fonts" id="builtinFontGroup"></optgroup>
-          <optgroup label="Custom fonts" id="customFontGroup"></optgroup>
-          <option value="__upload__">+ Upload custom font (.ttf/.otf)…</option>
+        <label for="shapeKindSelect">Shape type</label>
+        <select id="shapeKindSelect" style="width:100%;padding:7px 8px;font-size:13px;border-radius:8px;border:1px solid var(--panel-border);">
+          <option value="star">Star</option>
+          <option value="rectangle">Rectangle</option>
+          <option value="square">Square</option>
+          <option value="ellipse">Ellipse</option>
+          <option value="circle">Circle</option>
+          <option value="line">Line</option>
         </select>
-        <input type="file" id="fontFileInput" accept=".ttf,.otf,font/ttf,font/otf" style="display:none;">
       </div>
+      <div class="field checkbox-row" id="shapeFilledRow">
+        <input type="checkbox" id="shapeFilledCheckbox" checked>
+        <label for="shapeFilledCheckbox" style="margin:0;font-weight:400;">Filled shape (uncheck for outline only)</label>
+      </div>
+      <div class="field" id="shapeStrokeWidthField" style="display:none;">
+        <label for="shapeStrokeWidthRange">Line width <span id="shapeStrokeWidthLabel" style="font-weight:400;color:var(--muted);">6</span></label>
+        <div class="row">
+          <input type="range" id="shapeStrokeWidthRange" min="1" max="40" value="6" step="1">
+        </div>
+      </div>
+    </div>
 
+    <div id="colorFieldsGroup" style="display:none;">
       <div class="field">
-        <label>Text color (CMYK)</label>
+        <label>Color (CMYK)</label>
         <div class="color-wheel-wrap">
           <div class="color-wheel" id="colorWheel" role="slider" aria-label="Color hue and saturation" tabindex="0">
             <div class="color-wheel-dot" id="colorWheelDot"></div>
@@ -419,6 +469,23 @@
           <span class="color-swatch" id="colorSwatch"></span>
           <span id="cmykReadout" style="font-size:11px;color:var(--muted);margin-left:auto;"></span>
         </div>
+      </div>
+    </div>
+
+    <div id="textFieldsGroup" style="display:none;">
+      <div class="field">
+        <label for="textContentInput">Text content</label>
+        <textarea id="textContentInput" rows="2" style="width:100%;padding:7px 8px;font-size:13px;border-radius:8px;border:1px solid var(--panel-border);resize:vertical;"></textarea>
+      </div>
+
+      <div class="field">
+        <label for="fontSelect">Font</label>
+        <select id="fontSelect" style="width:100%;padding:7px 8px;font-size:13px;border-radius:8px;border:1px solid var(--panel-border);">
+          <optgroup label="Built-in fonts" id="builtinFontGroup"></optgroup>
+          <optgroup label="Custom fonts" id="customFontGroup"></optgroup>
+          <option value="__upload__">+ Upload custom font (.ttf/.otf)…</option>
+        </select>
+        <input type="file" id="fontFileInput" accept=".ttf,.otf,font/ttf,font/otf" style="display:none;">
       </div>
     </div>
 
@@ -457,6 +524,10 @@
         <div class="handle corner" id="handle-tr" style="cursor:nesw-resize;"></div>
         <div class="handle corner" id="handle-br" style="cursor:nwse-resize;"></div>
         <div class="handle corner" id="handle-bl" style="cursor:nesw-resize;"></div>
+        <div class="handle edge edge-v" id="handle-top" title="Stretch" style="cursor:ns-resize;"></div>
+        <div class="handle edge edge-v" id="handle-bottom" title="Stretch" style="cursor:ns-resize;"></div>
+        <div class="handle edge edge-h" id="handle-left" title="Stretch" style="cursor:ew-resize;"></div>
+        <div class="handle edge edge-h" id="handle-right" title="Stretch" style="cursor:ew-resize;"></div>
         <div class="handle rotate" id="handle-rotate" title="Rotate"></div>
       </div>
     </div>
@@ -549,9 +620,20 @@
     { value: `"Pacifico", cursive`, label: "Pacifico (Casual Script)", google: "Pacifico" }
   ];
 
+  // default bounding-box size (local, unscaled units — same convention as BASE_FONT_SIZE)
+  // for a freshly-added shape layer of each kind.
+  const SHAPE_DEFAULTS = {
+    star: { w: 200, h: 200 },
+    rectangle: { w: 240, h: 160 },
+    square: { w: 180, h: 180 },
+    ellipse: { w: 240, h: 160 },
+    circle: { w: 180, h: 180 },
+    line: { w: 240, h: 24 }
+  };
+
   // ---- state ----
   let bg = null;              // { w, h, viewBox, bgClones, clipClones, clipBBoxRect }
-  let layers = [];             // [{ id, type:'image'|'text', name, naturalW, naturalH, xform:{cx,cy,scale,rot}, fitScale, ... }]
+  let layers = [];             // [{ id, type:'image'|'text'|'shape', name, naturalW, naturalH, xform:{cx,cy,scale,rot}, fitScale, opacity, ... }]
   let selectedLayerId = null;
   let layerIdCounter = 0;
   let showGuide = true;
@@ -589,12 +671,28 @@
   const fontFileInput = document.getElementById("fontFileInput");
   const builtinFontGroup = document.getElementById("builtinFontGroup");
   const customFontGroup = document.getElementById("customFontGroup");
+  const colorFieldsGroup = document.getElementById("colorFieldsGroup");
   const colorWheel = document.getElementById("colorWheel");
   const colorWheelDot = document.getElementById("colorWheelDot");
   const cmykK = document.getElementById("cmykK");
   const cmykKVal = document.getElementById("cmykKVal");
   const colorSwatch = document.getElementById("colorSwatch");
   const cmykReadout = document.getElementById("cmykReadout");
+  const opacityRange = document.getElementById("opacityRange");
+  const opacityLabel = document.getElementById("opacityLabel");
+  const addShapeButtons = document.querySelectorAll("[data-shape-kind]");
+  const shapeFieldsGroup = document.getElementById("shapeFieldsGroup");
+  const shapeKindSelect = document.getElementById("shapeKindSelect");
+  const shapeFilledRow = document.getElementById("shapeFilledRow");
+  const shapeFilledCheckbox = document.getElementById("shapeFilledCheckbox");
+  const shapeStrokeWidthField = document.getElementById("shapeStrokeWidthField");
+  const shapeStrokeWidthRange = document.getElementById("shapeStrokeWidthRange");
+  const shapeStrokeWidthLabel = document.getElementById("shapeStrokeWidthLabel");
+
+  // ---- shared: which layer types use the color wheel / are colorable ----
+  function isColorableLayer(layer){
+    return !!layer && (layer.type === "text" || layer.type === "shape");
+  }
 
   // ---- layer helpers ----
   function getSelectedLayer(){
@@ -661,7 +759,7 @@
 
   function setColorFromWheel(hue, sat){
     const selected = getSelectedLayer();
-    if (!selected || selected.type !== "text") return;
+    if (!isColorableLayer(selected)) return;
     const rgb = hsvToRgb(hue, sat, 1);
     const c = (1 - rgb.r) * 100, m = (1 - rgb.g) * 100, y = (1 - rgb.b) * 100;
     const k = parseFloat(cmykK.value);
@@ -709,6 +807,67 @@
     g.setAttribute("transform", `translate(${-(layer.textOffsetX||0)} ${-(layer.textOffsetY||0)})`);
     g.appendChild(createTextElement(layer));
     return g;
+  }
+
+  // ---- shape layer helpers ----
+  function starPath(hw, hh){
+    const outerR = Math.min(hw, hh);
+    const innerR = outerR * 0.382;
+    const pts = [];
+    for (let i = 0; i < 10; i++){
+      const r = i % 2 === 0 ? outerR : innerR;
+      const angle = -Math.PI/2 + i * Math.PI/5;
+      pts.push(`${(r*Math.cos(angle)).toFixed(2)},${(r*Math.sin(angle)).toFixed(2)}`);
+    }
+    return "M" + pts.join("L") + "Z";
+  }
+
+  function createShapeElement(layer){
+    const hw = layer.naturalW/2, hh = layer.naturalH/2;
+    const isLine = layer.shapeKind === "line";
+    const filled = !isLine && layer.filled;
+    let el;
+    switch (layer.shapeKind){
+      case "rectangle":
+      case "square":
+        el = document.createElementNS(NS, "rect");
+        el.setAttribute("x", String(-hw));
+        el.setAttribute("y", String(-hh));
+        el.setAttribute("width", String(layer.naturalW));
+        el.setAttribute("height", String(layer.naturalH));
+        break;
+      case "circle":
+      case "ellipse":
+        el = document.createElementNS(NS, "ellipse");
+        el.setAttribute("cx", "0");
+        el.setAttribute("cy", "0");
+        el.setAttribute("rx", String(hw));
+        el.setAttribute("ry", String(hh));
+        break;
+      case "star":
+        el = document.createElementNS(NS, "path");
+        el.setAttribute("d", starPath(hw, hh));
+        break;
+      case "line":
+      default:
+        el = document.createElementNS(NS, "line");
+        el.setAttribute("x1", String(-hw));
+        el.setAttribute("y1", "0");
+        el.setAttribute("x2", String(hw));
+        el.setAttribute("y2", "0");
+        break;
+    }
+    if (isLine || !filled){
+      el.setAttribute("fill", "none");
+      el.setAttribute("stroke", layer.fillColor);
+      el.setAttribute("stroke-width", String(layer.strokeWidth));
+      el.setAttribute("stroke-linecap", "round");
+      el.setAttribute("stroke-linejoin", "round");
+    } else {
+      el.setAttribute("fill", layer.fillColor);
+      el.setAttribute("stroke", "none");
+    }
+    return el;
   }
 
   // measures a text layer's rendered bounding box at BASE_FONT_SIZE so its handles/guide
@@ -1200,6 +1359,18 @@
     placeHandle("handle-br", corners.br);
     placeHandle("handle-bl", corners.bl);
     placeHandle("handle-rotate", rotStage);
+
+    // stretch/smoosh (non-uniform resize) handles — shapes only
+    const canStretch = selected.type === "shape";
+    ["handle-top","handle-bottom","handle-left","handle-right"].forEach((id) => {
+      document.getElementById(id).style.display = canStretch ? "block" : "none";
+    });
+    if (canStretch){
+      placeHandle("handle-top", toDisplay(localToStage(selected.xform, 0, -hh)));
+      placeHandle("handle-bottom", toDisplay(localToStage(selected.xform, 0, hh)));
+      placeHandle("handle-left", toDisplay(localToStage(selected.xform, -hw, 0)));
+      placeHandle("handle-right", toDisplay(localToStage(selected.xform, hw, 0)));
+    }
   }
 
   function placeHandle(id, stagePt){
@@ -1270,6 +1441,50 @@
   }
   ["handle-tl","handle-tr","handle-br","handle-bl"].forEach(attachCornerHandle);
 
+  // ---- dragging: stretch/smoosh a single side (non-uniform resize, shape layers only) ----
+  // moving one edge grows/shrinks that dimension by the pointer's movement along that edge's
+  // local axis, while the opposite edge stays put — the layer's center shifts by half the
+  // change to keep the fixed edge fixed, matching typical "resize handle" behavior.
+  const MIN_SHAPE_SIZE = 4;
+  function attachEdgeHandle(id, dim, sign){
+    const el = document.getElementById(id);
+    el.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0) return;
+      const selected = getSelectedLayer();
+      if (!selected || selected.type !== "shape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      const start = stagePointFromEvent(e);
+      const rad = selected.xform.rot * Math.PI / 180;
+      const axis = dim === "w" ? { x: Math.cos(rad), y: Math.sin(rad) } : { x: -Math.sin(rad), y: Math.cos(rad) };
+      const startW = selected.naturalW, startH = selected.naturalH;
+      const startCx = selected.xform.cx, startCy = selected.xform.cy;
+      const scale = selected.xform.scale;
+      function move(ev){
+        const cur = stagePointFromEvent(ev);
+        const dProj = ((cur.x - start.x) * axis.x + (cur.y - start.y) * axis.y) / scale;
+        const startSize = dim === "w" ? startW : startH;
+        const newSize = Math.max(MIN_SHAPE_SIZE, startSize + sign * dProj);
+        const appliedDelta = sign * (newSize - startSize);
+        if (dim === "w") selected.naturalW = newSize; else selected.naturalH = newSize;
+        const centerShift = appliedDelta / 2;
+        selected.xform.cx = startCx + centerShift * scale * axis.x;
+        selected.xform.cy = startCy + centerShift * scale * axis.y;
+        buildStage();
+      }
+      function up(){
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", up);
+      }
+      window.addEventListener("pointermove", move);
+      window.addEventListener("pointerup", up);
+    });
+  }
+  attachEdgeHandle("handle-left", "w", -1);
+  attachEdgeHandle("handle-right", "w", 1);
+  attachEdgeHandle("handle-top", "h", -1);
+  attachEdgeHandle("handle-bottom", "h", 1);
+
   // ---- dragging: rotate ----
   (function attachRotateHandle(){
     const el = document.getElementById("handle-rotate");
@@ -1333,6 +1548,7 @@
     rotRange.disabled = !hasSelection;
     rotLeftBtn.disabled = !hasSelection;
     rotRightBtn.disabled = !hasSelection;
+    opacityRange.disabled = !hasSelection;
     downloadZipBtn.disabled = !hasLayers;
   }
 
@@ -1361,9 +1577,14 @@
 
       const name = document.createElement("span");
       name.className = "layer-name";
-      name.textContent = layer.type === "text"
-        ? ("🔤 " + ((layer.text || "Text").split("\n")[0].slice(0, 24) || "Text"))
-        : layer.name;
+      if (layer.type === "text"){
+        name.textContent = "🔤 " + ((layer.text || "Text").split("\n")[0].slice(0, 24) || "Text");
+      } else if (layer.type === "shape"){
+        const kindLabel = layer.shapeKind.charAt(0).toUpperCase() + layer.shapeKind.slice(1);
+        name.textContent = "🔷 " + kindLabel;
+      } else {
+        name.textContent = layer.name;
+      }
       li.appendChild(name);
 
       const removeBtn = document.createElement("button");
@@ -1435,20 +1656,51 @@
     syncTextControls();
   }
 
-  // ---- text layer controls: populate the panel from the selected layer, or hide it ----
-  function syncTextControls(){
+  // ---- per-layer-type controls: populate the panel from the selected layer, or hide it ----
+  function syncOpacityControl(){
     const selected = getSelectedLayer();
-    const isText = !!selected && selected.type === "text";
-    textFieldsGroup.style.display = isText ? "" : "none";
-    if (!isText) return;
-    if (document.activeElement !== textContentInput) textContentInput.value = selected.text;
-    fontSelect.value = selected.fontFamily;
+    const val = selected ? (selected.opacity == null ? 100 : selected.opacity) : 100;
+    opacityRange.value = val;
+    opacityLabel.textContent = Math.round(val) + "%";
+  }
+
+  function syncColorControls(){
+    const selected = getSelectedLayer();
+    const colorable = isColorableLayer(selected);
+    colorFieldsGroup.style.display = colorable ? "" : "none";
+    if (!colorable) return;
     const rgb = { r: 1 - selected.color.c/100, g: 1 - selected.color.m/100, b: 1 - selected.color.y/100 };
     const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
     positionWheelDot(hsv.h, hsv.s);
     cmykK.value = selected.color.k;
     cmykKVal.textContent = selected.color.k + "%";
     updateColorReadout(selected);
+  }
+
+  function syncTextControls(){
+    const selected = getSelectedLayer();
+    const isText = !!selected && selected.type === "text";
+    textFieldsGroup.style.display = isText ? "" : "none";
+    if (isText){
+      if (document.activeElement !== textContentInput) textContentInput.value = selected.text;
+      fontSelect.value = selected.fontFamily;
+    }
+
+    const isShape = !!selected && selected.type === "shape";
+    shapeFieldsGroup.style.display = isShape ? "" : "none";
+    if (isShape){
+      shapeKindSelect.value = selected.shapeKind;
+      const isLine = selected.shapeKind === "line";
+      shapeFilledRow.style.display = isLine ? "none" : "";
+      shapeFilledCheckbox.checked = selected.filled;
+      const showStrokeWidth = isLine || !selected.filled;
+      shapeStrokeWidthField.style.display = showStrokeWidth ? "" : "none";
+      shapeStrokeWidthRange.value = selected.strokeWidth;
+      shapeStrokeWidthLabel.textContent = selected.strokeWidth;
+    }
+
+    syncColorControls();
+    syncOpacityControl();
   }
 
   function addTextLayer(){
@@ -1461,6 +1713,7 @@
       fontFamily: BUILTIN_FONTS[0].value,
       color: { c:0, m:0, y:0, k:100 },
       fillColor: cmykToHex(0, 0, 0, 100),
+      opacity: 100,
       xform: { cx, cy, scale:1, rot:0 },
       fitScale: 1
     };
@@ -1475,6 +1728,34 @@
     syncTextControls();
     textContentInput.focus();
     textContentInput.select();
+  }
+
+  function addShapeLayer(kind){
+    const cx = bg ? bg.clipBBoxRect.x + bg.clipBBoxRect.w/2 : 0;
+    const cy = bg ? bg.clipBBoxRect.y + bg.clipBBoxRect.h/2 : 0;
+    const dims = SHAPE_DEFAULTS[kind] || SHAPE_DEFAULTS.rectangle;
+    const layer = {
+      id: ++layerIdCounter,
+      type: "shape",
+      shapeKind: kind,
+      filled: true,
+      strokeWidth: 6,
+      color: { c:0, m:0, y:0, k:100 },
+      fillColor: cmykToHex(0, 0, 0, 100),
+      opacity: 100,
+      naturalW: dims.w,
+      naturalH: dims.h,
+      xform: { cx, cy, scale:1, rot:0 },
+      fitScale: 1
+    };
+    layers.push(layer);
+    selectedLayerId = layer.id;
+    renderLayerList();
+    buildStage();
+    syncZoomSlider();
+    syncRotationSlider();
+    updateControlsEnabled();
+    syncTextControls();
   }
 
   // ---- events: image upload (adds one layer per selected file) ----
@@ -1494,6 +1775,7 @@
             naturalW: tmp.naturalWidth || 300,
             naturalH: tmp.naturalHeight || 300,
             dataURL,
+            opacity: 100,
             xform: { cx:0, cy:0, scale:1, rot:0 },
             fitScale: 1
           };
@@ -1606,7 +1888,7 @@
 
   colorWheel.addEventListener("pointerdown", (e) => {
     const selected = getSelectedLayer();
-    if (!selected || selected.type !== "text") return;
+    if (!isColorableLayer(selected)) return;
     e.preventDefault();
     colorWheel.setPointerCapture(e.pointerId);
     const apply = (ev) => {
@@ -1628,12 +1910,50 @@
 
   cmykK.addEventListener("input", () => {
     const selected = getSelectedLayer();
-    if (!selected || selected.type !== "text") return;
+    if (!isColorableLayer(selected)) return;
     const k = parseFloat(cmykK.value);
     selected.color.k = k;
     selected.fillColor = cmykToHex(selected.color.c, selected.color.m, selected.color.y, k);
     cmykKVal.textContent = k + "%";
     updateColorReadout(selected);
+    buildStage();
+  });
+
+  // ---- events: opacity (shared across image / text / shape layers) ----
+  opacityRange.addEventListener("input", () => {
+    const selected = getSelectedLayer();
+    if (!selected) return;
+    selected.opacity = parseFloat(opacityRange.value);
+    opacityLabel.textContent = Math.round(selected.opacity) + "%";
+    buildStage();
+  });
+
+  // ---- events: shape layers ----
+  addShapeButtons.forEach((btn) => {
+    btn.addEventListener("click", () => addShapeLayer(btn.dataset.shapeKind));
+  });
+
+  shapeKindSelect.addEventListener("change", () => {
+    const selected = getSelectedLayer();
+    if (!selected || selected.type !== "shape") return;
+    selected.shapeKind = shapeKindSelect.value;
+    buildStage();
+    syncTextControls();
+  });
+
+  shapeFilledCheckbox.addEventListener("change", () => {
+    const selected = getSelectedLayer();
+    if (!selected || selected.type !== "shape") return;
+    selected.filled = shapeFilledCheckbox.checked;
+    buildStage();
+    syncTextControls();
+  });
+
+  shapeStrokeWidthRange.addEventListener("input", () => {
+    const selected = getSelectedLayer();
+    if (!selected || selected.type !== "shape") return;
+    selected.strokeWidth = parseFloat(shapeStrokeWidthRange.value);
+    shapeStrokeWidthLabel.textContent = shapeStrokeWidthRange.value;
     buildStage();
   });
 
@@ -1779,16 +2099,24 @@
   }
 
   function buildLayerVisual(layer){
-    if (layer.type === "text") return createTextGroup(layer);
-    const imageEl = document.createElementNS(NS, "image");
-    imageEl.setAttributeNS(XLINK, "href", layer.dataURL);
-    imageEl.setAttribute("href", layer.dataURL);
-    imageEl.setAttribute("x", -layer.naturalW/2);
-    imageEl.setAttribute("y", -layer.naturalH/2);
-    imageEl.setAttribute("width", layer.naturalW);
-    imageEl.setAttribute("height", layer.naturalH);
-    imageEl.setAttribute("preserveAspectRatio", "none");
-    return imageEl;
+    let el;
+    if (layer.type === "text"){
+      el = createTextGroup(layer);
+    } else if (layer.type === "shape"){
+      el = createShapeElement(layer);
+    } else {
+      el = document.createElementNS(NS, "image");
+      el.setAttributeNS(XLINK, "href", layer.dataURL);
+      el.setAttribute("href", layer.dataURL);
+      el.setAttribute("x", -layer.naturalW/2);
+      el.setAttribute("y", -layer.naturalH/2);
+      el.setAttribute("width", layer.naturalW);
+      el.setAttribute("height", layer.naturalH);
+      el.setAttribute("preserveAspectRatio", "none");
+    }
+    const opacity = layer.opacity == null ? 100 : layer.opacity;
+    if (opacity < 100) el.setAttribute("opacity", String(Math.max(0, Math.min(100, opacity)) / 100));
+    return el;
   }
 
   function buildLayerGroup(layer){
@@ -1996,7 +2324,7 @@
           zip.file(buildExportFilename("jpg"), jpgBlob);
           zip.file(buildExportFilename("png", "full-layers"), pngBlob);
 
-          const imageLayers = layers.filter((l) => l.type !== "text");
+          const imageLayers = layers.filter((l) => l.type === "image");
           if (imageLayers.length){
             const originalsFolder = zip.folder("original-images");
             const usedNames = new Set();
