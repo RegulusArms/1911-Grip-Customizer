@@ -1681,9 +1681,11 @@
   }
 
   function removeLayer(id){
+    const removedIndex = layers.findIndex((l) => l.id === id);
     layers = layers.filter((l) => l.id !== id);
     if (selectedLayerId === id){
-      selectedLayerId = layers.length ? layers[layers.length - 1].id : null;
+      const nextIndex = Math.min(removedIndex, layers.length - 1);
+      selectedLayerId = nextIndex >= 0 ? layers[nextIndex].id : null;
     }
     renderLayerList();
     buildStage();
@@ -2114,6 +2116,11 @@
     if (!selected) return;
     const tag = (document.activeElement && document.activeElement.tagName) || "";
     if (["INPUT","SELECT","TEXTAREA"].includes(tag)) return; // don't hijack typing/sliders
+    if (e.key === "Delete" || e.key === "Backspace"){
+      e.preventDefault();
+      removeLayer(selected.id);
+      return;
+    }
     if (e.key !== "[" && e.key !== "]") return;
     e.preventDefault();
     const step = e.shiftKey ? 15 : 1;
