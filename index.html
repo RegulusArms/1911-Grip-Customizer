@@ -1221,6 +1221,17 @@
 
     const clipG = document.createElementNS(NS, "g");
     clipG.setAttribute("clip-path", "url(#userClip)");
+    // invisible backstop so a pointerdown anywhere within the visible/clipped grip area
+    // reaches our click-to-select handler, even over empty spots between layers.
+    const hitCatcher = document.createElementNS(NS, "rect");
+    hitCatcher.setAttribute("x", "0");
+    hitCatcher.setAttribute("y", "0");
+    hitCatcher.setAttribute("width", String(bg.w));
+    hitCatcher.setAttribute("height", String(bg.h));
+    hitCatcher.setAttribute("fill", "#000");
+    hitCatcher.setAttribute("fill-opacity", "0.001");
+    hitCatcher.setAttribute("pointer-events", "all");
+    clipG.appendChild(hitCatcher);
     layers.forEach((layer) => {
       const layerG = document.createElementNS(NS, "g");
       layerG.id = "layerGroup-" + layer.id;
@@ -1247,15 +1258,13 @@
       const sw = Math.max(bg.w, bg.h) * 0.003;
       guideRect.setAttribute("stroke-width", String(sw));
       guideRect.setAttribute("stroke-dasharray", (sw*4) + "," + (sw*3));
-      guideRect.setAttribute("pointer-events", "all");
-      guideRect.style.cursor = "grab";
+      guideRect.setAttribute("pointer-events", "none");
       guideRect.style.strokeOpacity = showGuide ? "1" : "0";
       guideG.appendChild(guideRect);
       levelGroup.appendChild(guideG);
     }
 
     updateHandles();
-    attachStageInteractions();
   }
 
   function updateSelectedLayerTransform(){
@@ -1381,26 +1390,53 @@
     el.style.top = px.y + "px";
   }
 
-  // ---- dragging: move (guide rect, recreated on buildStage) ----
-  function attachStageInteractions(){
-    const guideRect = document.getElementById("guideRect");
-    if (!guideRect) return;
-    guideRect.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0) return;
-      const selected = getSelectedLayer();
-      if (!selected) return;
+  // ---- click-to-select + drag-to-move ----
+  // inverse of localToStage: converts a stage-space point into a layer's own local
+  // (unrotated, unscaled) coordinate space, so it can be compared against that layer's
+  // naturalW/naturalH bounding box for hit-testing.
+  function stageToLocal(xform, sx, sy){
+    const dx = sx - xform.cx, dy = sy - xform.cy;
+    const rad = xform.rot * Math.PI/180;
+    const cos = Math.cos(rad), sin = Math.sin(rad);
+    return {
+      x: (dx*cos + dy*sin) / xform.scale,
+      y: (-dx*sin + dy*cos) / xform.scale
+    };
+  }
+
+  // topmost layer wins: iterate back-to-front (layers[] is bottom-to-top, matching
+  // render order), so a fully-overlapped layer underneath never steals the click.
+  function hitTestLayerAt(stagePt){
+    for (let i = layers.length - 1; i >= 0; i--){
+      const layer = layers[i];
+      const local = stageToLocal(layer.xform, stagePt.x, stagePt.y);
+      if (Math.abs(local.x) <= layer.naturalW/2 && Math.abs(local.y) <= layer.naturalH/2){
+        return layer;
+      }
+    }
+    return null;
+  }
+
+  // attached once to #stage (which persists across buildStage() rebuilds, unlike its
+  // children) — clicking any layer's visible area selects it (topmost wins on overlap)
+  // and immediately starts dragging it, same as the old per-selected-layer guide rect did.
+  function attachStageSelectAndDrag(){
+    stage.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || !bg) return;
+      const stagePt = stagePointFromEvent(e);
+      const hit = hitTestLayerAt(stagePt);
+      if (!hit) return;
       e.preventDefault();
-      guideRect.style.cursor = "grabbing";
-      const start = stagePointFromEvent(e);
-      const startCx = selected.xform.cx, startCy = selected.xform.cy;
+      if (hit.id !== selectedLayerId) selectLayer(hit.id);
+      const start = stagePt;
+      const startCx = hit.xform.cx, startCy = hit.xform.cy;
       function move(ev){
         const cur = stagePointFromEvent(ev);
-        selected.xform.cx = startCx + (cur.x - start.x);
-        selected.xform.cy = startCy + (cur.y - start.y);
+        hit.xform.cx = startCx + (cur.x - start.x);
+        hit.xform.cy = startCy + (cur.y - start.y);
         updateSelectedLayerTransform();
       }
       function up(){
-        guideRect.style.cursor = "grab";
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", up);
       }
@@ -1408,6 +1444,7 @@
       window.addEventListener("pointerup", up);
     });
   }
+  attachStageSelectAndDrag();
 
   // ---- dragging: resize (corner handles, attached once) ----
   function attachCornerHandle(id){
