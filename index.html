@@ -133,6 +133,11 @@
   .btn-primary + .btn-primary{
     margin-top:8px;
   }
+  .btn.active{
+    background:var(--accent);
+    color:#fff;
+    border-color:var(--accent);
+  }
   .checkbox-row{
     display:flex;
     align-items:center;
@@ -516,6 +521,10 @@
         <input type="checkbox" id="levelViewCheckbox">
         <label for="levelViewCheckbox" style="margin:0;font-weight:400;">Level view (bottom parallel to ground)</label>
       </div>
+      <div class="btn-row" style="margin-top:8px;">
+        <button class="btn" id="previewFadeBtn" type="button">Preview edge fade</button>
+      </div>
+      <p class="hint" id="previewFadeHint" style="display:none;margin:6px 0 0;text-align:left;">Simulated preview only (1911 grips) — shows how the ~2-3mm curved outer edges fade and shift color when printed. Not included in exports.</p>
     </div>
 
     <hr class="sep">
@@ -648,6 +657,7 @@
   let currentShapeLabel = "";
   let dragSrcLi = null;
   let levelView = false;      // display-only: show the shape rotated so its bottom edge is level
+  let previewFadeOn = false;  // display-only: simulate the curved-edge print fade on 1911 grips
   const view = { scale: 1, tx: 0, ty: 0 }; // workspace pan/zoom (CSS transform on #stage, separate from layer xforms)
   const MIN_VIEW_SCALE = 0.25, MAX_VIEW_SCALE = 10;
   let customFonts = {};        // familyName -> data URL
@@ -662,6 +672,8 @@
   const layerListEl = document.getElementById("layerList");
   const shapeSelect = document.getElementById("shapeSelect");
   const levelViewCheckbox = document.getElementById("levelViewCheckbox");
+  const previewFadeBtn = document.getElementById("previewFadeBtn");
+  const previewFadeHint = document.getElementById("previewFadeHint");
   const fitBtn = document.getElementById("fitBtn");
   const removeImgBtn = document.getElementById("removeImgBtn");
   const imageFieldsGroup = document.getElementById("imageFieldsGroup");
@@ -1162,6 +1174,40 @@
       }
     });
 
+    // detect small closed sub-paths (screw holes / cutouts) within any compound <path>,
+    // by splitting its "d" on each M/m and measuring the resulting sub-path's own bbox —
+    // used later to keep the edge-fade preview off of hole boundaries.
+    const holeCircles = [];
+    allShapes.forEach((el) => {
+      if (el.tagName.toLowerCase() !== "path") return;
+      const d = el.getAttribute("d");
+      if (!d) return;
+      const subpaths = d.match(/[Mm][^Mm]*/g);
+      if (!subpaths || subpaths.length < 2) return;
+      const subInfos = subpaths.map((sub) => {
+        const tmp = document.createElementNS(NS, "path");
+        tmp.setAttribute("d", sub);
+        liveSvg.appendChild(tmp);
+        let bb = null;
+        try{ bb = tmp.getBBox(); }catch(e){ /* ignore */ }
+        liveSvg.removeChild(tmp);
+        return (bb && bb.width > 0 && bb.height > 0) ? { bb, area: bb.width * bb.height } : null;
+      }).filter(Boolean);
+      if (subInfos.length < 2) return;
+      subInfos.sort((a, b) => b.area - a.area);
+      const mainArea = subInfos[0].area;
+      for (let i = 1; i < subInfos.length; i++){
+        const info = subInfos[i];
+        if (info.area < mainArea * 0.25){
+          holeCircles.push({
+            cx: info.bb.x + info.bb.width / 2,
+            cy: info.bb.y + info.bb.height / 2,
+            r: Math.max(info.bb.width, info.bb.height) / 2
+          });
+        }
+      }
+    });
+
     document.body.removeChild(hidden);
 
     if (!clipBBox){
@@ -1180,7 +1226,7 @@
 
     bg = {
       w, h, viewBox: vb,
-      bgClones, clipClones,
+      bgClones, clipClones, holeCircles,
       clipBBoxRect: { x:clipBBox.x, y:clipBBox.y, w:clipBBox.x2-clipBBox.x, h:clipBBox.y2-clipBBox.y },
       levelTransform: computeLevelTransform(hullPoints, clipBBox, w, h)
     };
@@ -1203,6 +1249,158 @@
     layer.xform = { cx: cbb.x + cbb.w/2, cy: cbb.y + cbb.h/2, scale: fitScale, rot: 0 };
   }
 
+  // ---- preview-only "edge fade" simulation: 1911 grip panels wrap around a curved   ----
+  // ---- frame, so the outer ~2-3mm of the left/right edges print with reduced ink    ----
+  // ---- density and slight warping. This is a live-preview effect only (an SVG       ----
+  // ---- filter applied to the on-screen layer stack) — it never touches the export   ----
+  // ---- paths (buildClippedLayersSvg / buildFullLayersSvg), which stay unaffected.   ----
+  function isFadeEligibleShape(){
+    return shapeSelect.value === "left" || shapeSelect.value === "right";
+  }
+
+  function updatePreviewFadeUI(){
+    const eligible = isFadeEligibleShape();
+    if (!eligible && previewFadeOn) previewFadeOn = false;
+    previewFadeBtn.disabled = !eligible;
+    previewFadeBtn.classList.toggle("active", previewFadeOn);
+    previewFadeBtn.textContent = previewFadeOn ? "Preview edge fade: ON" : "Preview edge fade";
+    previewFadeHint.style.display = previewFadeOn ? "" : "none";
+  }
+
+  // Builds the pieces (in `defs`) needed to render a second, distorted copy of the layer
+  // stack that's only visible in a band hugging the panel's true left/right edge — however
+  // it tapers, since the band is built by stroking the actual outline path in place (via a
+  // real <mask>/<clip-path>, not an feImage re-fetch, which turned out not to preserve
+  // exact coordinates for non-trivial content) rather than assuming a straight vertical
+  // edge. `edgeFadeMask` is what a caller applies (via mask="url(#edgeFadeMask)") to that
+  // second copy; `edgeFadeDistortFilter` is the warp/lighten filter for that same copy.
+  // Band width is sized off the clip bbox height (assuming a ~127mm/5in overall panel
+  // length) and gated to the left/right portions of the bounding box only, so the flatter
+  // top/bottom caps of the outline are excluded; detected cutouts (screw holes) are also
+  // explicitly punched out of the gate so the band never wraps around them.
+  function appendEdgeFadeDefs(defs, bg){
+    const cbb = bg.clipBBoxRect;
+    const FADE_MM = 4.5;
+    const REF_GRIP_LENGTH_MM = 127;
+    const scaleUnitsPerMM = cbb.h / REF_GRIP_LENGTH_MM;
+    let fadeUnits = scaleUnitsPerMM * FADE_MM;
+    fadeUnits = Math.min(fadeUnits, cbb.w * 0.35);
+    const ribbonWidth = fadeUnits * 2; // stroked centered on the outline; only the inward half survives (clipped to the true silhouette below)
+
+    // region generously covers the outline plus the ribbon's outward overshoot
+    const M = fadeUnits * 2.5 + 4;
+    const rx = cbb.x - M, ry = cbb.y - M, rw = cbb.w + 2 * M, rh = cbb.h + 2 * M;
+
+    // coarse left/right-only gate (excludes screw holes and top/bottom caps near the
+    // horizontal center of the bounding box)
+    const INCLUDE_PCT = 40;
+    const grad = document.createElementNS(NS, "linearGradient");
+    grad.id = "edgeFadeXGrad";
+    grad.setAttribute("x1", "0"); grad.setAttribute("x2", "1");
+    grad.setAttribute("y1", "0"); grad.setAttribute("y2", "0");
+    [[0, true], [INCLUDE_PCT, false], [100 - INCLUDE_PCT, false], [100, true]].forEach(([offset, white]) => {
+      const stop = document.createElementNS(NS, "stop");
+      stop.setAttribute("offset", offset + "%");
+      stop.setAttribute("stop-color", white ? "#ffffff" : "#000000");
+      grad.appendChild(stop);
+    });
+    defs.appendChild(grad);
+
+    const xMask = document.createElementNS(NS, "mask");
+    xMask.id = "edgeFadeXMask";
+    xMask.setAttribute("maskUnits", "userSpaceOnUse");
+    xMask.setAttribute("x", String(rx)); xMask.setAttribute("y", String(ry));
+    xMask.setAttribute("width", String(rw)); xMask.setAttribute("height", String(rh));
+    const xMaskRect = document.createElementNS(NS, "rect");
+    xMaskRect.setAttribute("x", String(cbb.x));
+    xMaskRect.setAttribute("y", String(cbb.y));
+    xMaskRect.setAttribute("width", String(cbb.w));
+    xMaskRect.setAttribute("height", String(cbb.h));
+    xMaskRect.setAttribute("fill", "url(#edgeFadeXGrad)");
+    xMask.appendChild(xMaskRect);
+    // punch out a hole-shaped exclusion around each detected cutout (screw holes etc.) so
+    // the fade band never wraps around them, regardless of how close they sit to the edge
+    (bg.holeCircles || []).forEach((hole) => {
+      const cutout = document.createElementNS(NS, "circle");
+      cutout.setAttribute("cx", String(hole.cx));
+      cutout.setAttribute("cy", String(hole.cy));
+      cutout.setAttribute("r", String(hole.r + fadeUnits + 2));
+      cutout.setAttribute("fill", "#000000");
+      xMask.appendChild(cutout);
+    });
+    defs.appendChild(xMask);
+
+    // the outline itself, stroked in place — this is what makes the band follow the
+    // panel's real taper/curvature at every point instead of a fixed vertical line. The
+    // clip-path (the app's real silhouette) keeps only the inward half of the stroke, and
+    // the x-gate mask restricts it to the left/right portions of the outline.
+    const edgeMask = document.createElementNS(NS, "mask");
+    edgeMask.id = "edgeFadeMask";
+    edgeMask.setAttribute("maskUnits", "userSpaceOnUse");
+    edgeMask.setAttribute("x", String(rx)); edgeMask.setAttribute("y", String(ry));
+    edgeMask.setAttribute("width", String(rw)); edgeMask.setAttribute("height", String(rh));
+    const silhouetteG = document.createElementNS(NS, "g");
+    silhouetteG.setAttribute("clip-path", "url(#userClip)");
+    const gatedG = document.createElementNS(NS, "g");
+    gatedG.setAttribute("mask", "url(#edgeFadeXMask)");
+    bg.clipClones.forEach((c) => {
+      const clone = c.cloneNode(true);
+      clone.setAttribute("fill", "none");
+      clone.setAttribute("stroke", "#ffffff");
+      clone.setAttribute("stroke-width", String(ribbonWidth));
+      clone.setAttribute("stroke-linejoin", "round");
+      gatedG.appendChild(clone);
+    });
+    silhouetteG.appendChild(gatedG);
+    edgeMask.appendChild(silhouetteG);
+    defs.appendChild(edgeMask);
+
+    // warp + lighten/desaturate filter applied to the (masked) distorted overlay copy
+    const filter = document.createElementNS(NS, "filter");
+    filter.id = "edgeFadeDistortFilter";
+    filter.setAttribute("x", "-40%"); filter.setAttribute("y", "-30%");
+    filter.setAttribute("width", "180%"); filter.setAttribute("height", "160%");
+    filter.setAttribute("color-interpolation-filters", "sRGB");
+
+    const turbulence = document.createElementNS(NS, "feTurbulence");
+    turbulence.setAttribute("type", "fractalNoise");
+    turbulence.setAttribute("baseFrequency", "0.9 0.05");
+    turbulence.setAttribute("numOctaves", "2");
+    turbulence.setAttribute("seed", "7");
+    turbulence.setAttribute("result", "noise");
+    filter.appendChild(turbulence);
+
+    const displace = document.createElementNS(NS, "feDisplacementMap");
+    displace.setAttribute("in", "SourceGraphic");
+    displace.setAttribute("in2", "noise");
+    displace.setAttribute("scale", String(Math.max(2, fadeUnits * 0.9)));
+    displace.setAttribute("xChannelSelector", "R");
+    displace.setAttribute("yChannelSelector", "G");
+    displace.setAttribute("result", "displaced");
+    filter.appendChild(displace);
+
+    const blur = document.createElementNS(NS, "feGaussianBlur");
+    blur.setAttribute("in", "displaced");
+    blur.setAttribute("stdDeviation", String(Math.max(0.5, fadeUnits * 0.35)));
+    blur.setAttribute("result", "blurred");
+    filter.appendChild(blur);
+
+    // lighten + pull each channel toward the others (desaturate) to read as reduced,
+    // grayed-out ink density — a stylized stand-in for CMYK dot gain loss on a curve.
+    const fadeMatrix = document.createElementNS(NS, "feColorMatrix");
+    fadeMatrix.setAttribute("in", "blurred");
+    fadeMatrix.setAttribute("type", "matrix");
+    fadeMatrix.setAttribute("values",
+      "0.72 0.14 0.10 0 0.16 " +
+      "0.10 0.72 0.14 0 0.16 " +
+      "0.14 0.10 0.72 0 0.16 " +
+      "0    0    0    1 0"
+    );
+    filter.appendChild(fadeMatrix);
+
+    defs.appendChild(filter);
+  }
+
   // ---- building the visible stage ----
   function buildStage(){
     stage.innerHTML = "";
@@ -1217,6 +1415,8 @@
     defs.appendChild(clipPath);
     const fontStyle = buildFontFaceDefsStyle();
     if (fontStyle) defs.appendChild(fontStyle);
+    const fadePreviewActive = previewFadeOn && isFadeEligibleShape();
+    if (fadePreviewActive) appendEdgeFadeDefs(defs, bg);
     stage.appendChild(defs);
 
     // everything below is nested in levelGroup so the optional "level view" rotation
@@ -1251,6 +1451,21 @@
       layerG.appendChild(buildLayerVisual(layer));
       clipG.appendChild(layerG);
     });
+
+    // preview-only: a second, distorted copy of the same layers, visible only within the
+    // edge-fade band (see appendEdgeFadeDefs) — drawn on top of the sharp layers above.
+    if (fadePreviewActive){
+      const fadeOverlay = document.createElementNS(NS, "g");
+      fadeOverlay.setAttribute("filter", "url(#edgeFadeDistortFilter)");
+      fadeOverlay.setAttribute("mask", "url(#edgeFadeMask)");
+      layers.forEach((layer) => {
+        const layerG = document.createElementNS(NS, "g");
+        layerG.setAttribute("transform", transformString(layer.xform));
+        layerG.appendChild(buildLayerVisual(layer));
+        fadeOverlay.appendChild(layerG);
+      });
+      clipG.appendChild(fadeOverlay);
+    }
     levelGroup.appendChild(clipG);
 
     const selected = getSelectedLayer();
@@ -2182,11 +2397,19 @@
     const shape = BUILTIN_SHAPES[shapeSelect.value];
     if (!shape) return;
     currentShapeLabel = shape.label;
+    updatePreviewFadeUI();
     parseAndLoadBackground(shape.svg);
   });
 
   levelViewCheckbox.addEventListener("change", () => {
     levelView = levelViewCheckbox.checked;
+    buildStage();
+  });
+
+  previewFadeBtn.addEventListener("click", () => {
+    if (!isFadeEligibleShape()) return;
+    previewFadeOn = !previewFadeOn;
+    updatePreviewFadeUI();
     buildStage();
   });
 
@@ -2591,6 +2814,7 @@
 
   shapeSelect.value = "left";
   currentShapeLabel = BUILTIN_SHAPES.left.label;
+  updatePreviewFadeUI();
   parseAndLoadBackground(BUILTIN_SHAPES.left.svg);
   renderLayerList();
   updateControlsEnabled();
