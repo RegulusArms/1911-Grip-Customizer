@@ -660,7 +660,7 @@
   let previewFadeOn = false;  // display-only: simulate the curved-edge print fade on 1911 grips
   const view = { scale: 1, tx: 0, ty: 0 }; // workspace pan/zoom (CSS transform on #stage, separate from layer xforms)
   const MIN_VIEW_SCALE = 0.25, MAX_VIEW_SCALE = 10;
-  let customFonts = {};        // familyName -> data URL
+  let customFonts = {};        // familyName -> array of {dataURL, unicodeRange}
   let customFontCounter = 0;
 
   // ---- dom refs ----
@@ -914,6 +914,15 @@
   }
 
   // ---- custom font handling ----
+  // renders all @font-face rules for a family: Google Fonts subset into several faces
+  // (one per unicode-range, e.g. latin/latin-ext/cyrillic), each of which must be kept
+  // separate — collapsing them to one file drops glyphs outside that file's subset.
+  function fontFaceRulesFor(name){
+    return customFonts[name].map((face) =>
+      `@font-face{font-family:"${name}";src:url(${face.dataURL});${face.unicodeRange ? `unicode-range:${face.unicodeRange};` : ""}}`
+    ).join("\n");
+  }
+
   function injectFontFaceStyle(){
     let styleEl = document.getElementById("customFontFaceStyle");
     if (!styleEl){
@@ -921,9 +930,7 @@
       styleEl.id = "customFontFaceStyle";
       document.head.appendChild(styleEl);
     }
-    styleEl.textContent = Object.keys(customFonts).map((name) =>
-      `@font-face{font-family:"${name}";src:url(${customFonts[name]});}`
-    ).join("\n");
+    styleEl.textContent = Object.keys(customFonts).map(fontFaceRulesFor).join("\n");
   }
 
   // builds an SVG <style> with the same @font-face rules so exported/rasterized SVGs
@@ -932,14 +939,17 @@
     const names = Object.keys(customFonts);
     if (!names.length) return null;
     const styleEl = document.createElementNS(NS, "style");
-    styleEl.textContent = names.map((name) =>
-      `@font-face{font-family:"${name}";src:url(${customFonts[name]});}`
-    ).join("\n");
+    styleEl.textContent = names.map(fontFaceRulesFor).join("\n");
     return styleEl;
   }
 
   function registerCustomFont(familyName, dataURL){
-    customFonts[familyName] = dataURL;
+    customFonts[familyName] = [{ dataURL, unicodeRange: null }];
+    injectFontFaceStyle();
+  }
+
+  function registerCustomFontFaces(familyName, faces){
+    customFonts[familyName] = faces;
     injectFontFaceStyle();
   }
 
@@ -962,30 +972,42 @@
   // the <link> stylesheet in <head> covers the live editor, but exported/rasterized SVGs
   // are rendered in an isolated context that can't see page stylesheets — only fonts baked
   // into the SVG's own @font-face (via customFonts) survive export, same as uploaded fonts.
-  function fetchGoogleFontDataURI(family){
+  // Google's CSS2 API returns one @font-face block per unicode-range subset (latin,
+  // latin-ext, cyrillic, vietnamese, ...). Grabbing only the first block's font file
+  // (as an earlier version of this function did) meant only that subset's glyphs
+  // rendered correctly in exports — any other character silently fell back to a
+  // generic font, e.g. every letter after the first. Fetch every subset instead.
+  function fetchGoogleFontFaces(family){
     const q = encodeURIComponent(family).replace(/%20/g, "+");
     return fetch(`https://fonts.googleapis.com/css2?family=${q}&display=swap`)
       .then((r) => r.text())
       .then((cssText) => {
-        const match = cssText.match(/src:\s*url\(([^)]+)\)\s*format\('woff2'\)/) || cssText.match(/src:\s*url\(([^)]+)\)/);
-        if (!match) throw new Error("No font file URL found for " + family);
-        return fetch(match[1]).then((r) => r.blob());
-      })
-      .then((blob) => new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(blob);
-      }));
+        const blocks = cssText.match(/@font-face\s*{[^}]*}/g) || [];
+        const faces = blocks.map((block) => {
+          const urlMatch = block.match(/src:\s*url\(([^)]+)\)\s*format\('woff2'\)/) || block.match(/src:\s*url\(([^)]+)\)/);
+          if (!urlMatch) return null;
+          const rangeMatch = block.match(/unicode-range:\s*([^;]+);/);
+          return { url: urlMatch[1], unicodeRange: rangeMatch ? rangeMatch[1].trim() : null };
+        }).filter(Boolean);
+        if (!faces.length) throw new Error("No font file URL found for " + family);
+        return Promise.all(faces.map((face) =>
+          fetch(face.url).then((r) => r.blob()).then((blob) => new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve({ unicodeRange: face.unicodeRange, dataURL: reader.result });
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+          }))
+        ));
+      });
   }
 
   const googleFontEmbedPromises = {};
   function ensureGoogleFontEmbedded(familyName){
     if (customFonts[familyName]) return Promise.resolve();
     if (googleFontEmbedPromises[familyName]) return googleFontEmbedPromises[familyName];
-    const p = fetchGoogleFontDataURI(familyName)
-      .then((dataURL) => {
-        registerCustomFont(familyName, dataURL);
+    const p = fetchGoogleFontFaces(familyName)
+      .then((faces) => {
+        registerCustomFontFaces(familyName, faces);
         let changed = false;
         layers.forEach((l) => {
           if (l.type === "text" && l.fontFamily.indexOf(`"${familyName}"`) !== -1){
