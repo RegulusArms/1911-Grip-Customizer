@@ -526,8 +526,18 @@
 
     <hr class="sep">
 
-    <button class="btn btn-primary" id="downloadZipBtn" disabled title="Downloads a zip containing the JPG mockup, the full quality PNG layers, and your original uploaded images">Download ZIP</button>
+    <button class="btn btn-primary" id="downloadZipBtn" disabled title="Downloads a zip containing the JPG mockup, the full quality PNG layers, a PNG of each individual layer, a project.xml with every layer's position/size/stacking data, and your original uploaded images — this zip can be re-loaded with &quot;Load project ZIP&quot; below">Download ZIP</button>
     <p class="download-note">Download the zip for each side of the grips (left and right), then email them to ross@regulusarms.com with your GunBroker order number or square order number as the subject line.</p>
+
+    <hr class="sep">
+
+    <div class="field">
+      <label for="projectZipInput">Load project ZIP</label>
+      <div class="dropzone" id="projectZipDropzone" tabindex="0" role="button" aria-label="Drop a project zip here or click to browse">
+        <strong>Drag &amp; drop an exported project .zip here</strong><br>or click to browse — re-creates the layers, positions, and background exactly as exported
+      </div>
+      <input type="file" id="projectZipInput" accept=".zip,application/zip" style="display:none;">
+    </div>
   </aside>
 
   <main class="stage-wrap">
@@ -659,6 +669,7 @@
   const MIN_VIEW_SCALE = 0.25, MAX_VIEW_SCALE = 10;
   let customFonts = {};        // familyName -> array of {dataURL, unicodeRange}
   let customFontCounter = 0;
+  let customFontLabels = {};   // familyName -> display label, for uploaded (non-Google) fonts only
 
   // ---- dom refs ----
   const stage = document.getElementById("stage");
@@ -666,6 +677,8 @@
   const handleLayer = document.getElementById("handleLayer");
   const imageInput = document.getElementById("imageInput");
   const dropzone = document.getElementById("dropzone");
+  const projectZipInput = document.getElementById("projectZipInput");
+  const projectZipDropzone = document.getElementById("projectZipDropzone");
   const layerListEl = document.getElementById("layerList");
   const shapeSelect = document.getElementById("shapeSelect");
   const levelViewCheckbox = document.getElementById("levelViewCheckbox");
@@ -952,6 +965,7 @@
   }
 
   function addCustomFontOption(value, label){
+    customFontLabels[value] = label;
     const opt = document.createElement("option");
     opt.value = value;
     opt.textContent = label;
@@ -2131,10 +2145,11 @@
     dropzone.classList.remove("dragover");
     addImageFiles(e.dataTransfer && e.dataTransfer.files);
   });
-  // prevent the browser from navigating away if a file is dropped outside the dropzone
+  // prevent the browser from navigating away if a file is dropped outside a dropzone
   ["dragover","drop"].forEach((evt) => {
     window.addEventListener(evt, (e) => {
-      if (e.target !== dropzone && !dropzone.contains(e.target)) e.preventDefault();
+      const inDropzone = dropzone.contains(e.target) || projectZipDropzone.contains(e.target);
+      if (!inDropzone) e.preventDefault();
     });
   });
 
@@ -2775,7 +2790,114 @@
     rasterizeSvgToBlob(outSvg, canvasW, canvasH, { background:null, mime:"image/png" }, cb);
   }
 
-  // ---- export: zip containing the JPG mockup, full-layers PNG, and original uploads ----
+  // ---- export: standalone PNG "asset" for a single text/shape layer (analogous to the ----
+  // ---- original file kept for an image layer), rendered unrotated/unscaled/full-opacity ----
+  // ---- at its own naturalW x naturalH so it reads as a clean, reusable asset.           ----
+  function buildSingleLayerPNGBlob(layer, cb){
+    const outSvg = document.createElementNS(NS, "svg");
+    outSvg.setAttribute("xmlns", NS);
+    outSvg.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:xlink", XLINK);
+    const hw = layer.naturalW/2, hh = layer.naturalH/2;
+    outSvg.setAttribute("viewBox", `${-hw} ${-hh} ${layer.naturalW} ${layer.naturalH}`);
+    outSvg.setAttribute("width", layer.naturalW);
+    outSvg.setAttribute("height", layer.naturalH);
+    const fontStyle = buildFontFaceDefsStyle();
+    if (fontStyle){
+      const defs = document.createElementNS(NS, "defs");
+      defs.appendChild(fontStyle);
+      outSvg.appendChild(defs);
+    }
+    outSvg.appendChild(buildLayerVisual(Object.assign({}, layer, { opacity: 100 })));
+    const longSide = Math.max(layer.naturalW, layer.naturalH, 1);
+    const exportScale = Math.max(1, Math.min(6, Math.round(1600 / longSide)));
+    const canvasW = Math.max(1, Math.round(layer.naturalW * exportScale));
+    const canvasH = Math.max(1, Math.round(layer.naturalH * exportScale));
+    rasterizeSvgToBlob(outSvg, canvasW, canvasH, { background:null, mime:"image/png" }, cb);
+  }
+
+  function layerAssetBaseName(layer){
+    if (layer.type === "image") return layer.name || `image-${layer.id}`;
+    if (layer.type === "text"){
+      const words = (layer.text || "").trim().replace(/\s+/g, " ").split(" ").slice(0, 5).join(" ");
+      return `Text - ${words || "text"}`;
+    }
+    if (layer.type === "shape") return `Shape - ${layer.shapeKind}`;
+    return `layer-${layer.id}`;
+  }
+
+  // ---- export: project.xml — position/size/rotation/stacking data for every layer, plus ----
+  // ---- which background shape was used, so the zip can be re-loaded exactly as exported. ----
+  function buildProjectXML(assetFilenames, fontFilesMap){
+    const doc = document.implementation.createDocument(null, "gripCustomizerProject", null);
+    const root = doc.documentElement;
+    root.setAttribute("version", "1");
+    root.setAttribute("exportedAt", new Date().toISOString());
+
+    const bgEl = doc.createElement("background");
+    bgEl.setAttribute("shape", shapeSelect.value);
+    bgEl.setAttribute("label", currentShapeLabel || "");
+    bgEl.setAttribute("levelView", String(levelView));
+    root.appendChild(bgEl);
+
+    const layersEl = doc.createElement("layers");
+    layers.forEach((layer, i) => {
+      const el = doc.createElement("layer");
+      el.setAttribute("index", String(i));
+      el.setAttribute("type", layer.type);
+      el.setAttribute("cx", String(layer.xform.cx));
+      el.setAttribute("cy", String(layer.xform.cy));
+      el.setAttribute("scale", String(layer.xform.scale));
+      el.setAttribute("rotation", String(layer.xform.rot));
+      el.setAttribute("opacity", String(layer.opacity == null ? 100 : layer.opacity));
+      el.setAttribute("naturalWidth", String(layer.naturalW));
+      el.setAttribute("naturalHeight", String(layer.naturalH));
+      const fname = assetFilenames.get(layer.id);
+      if (fname) el.setAttribute("file", "original-images/" + fname);
+
+      if (layer.type === "image"){
+        el.setAttribute("name", layer.name || "");
+        if (layer.origNaturalW != null){
+          el.setAttribute("origNaturalWidth", String(layer.origNaturalW));
+          el.setAttribute("origNaturalHeight", String(layer.origNaturalH));
+        }
+      } else if (layer.type === "shape"){
+        el.setAttribute("shapeKind", layer.shapeKind);
+        el.setAttribute("filled", String(!!layer.filled));
+        el.setAttribute("strokeWidth", String(layer.strokeWidth));
+        el.setAttribute("colorC", String(layer.color.c));
+        el.setAttribute("colorM", String(layer.color.m));
+        el.setAttribute("colorY", String(layer.color.y));
+        el.setAttribute("colorK", String(layer.color.k));
+      } else if (layer.type === "text"){
+        el.setAttribute("colorC", String(layer.color.c));
+        el.setAttribute("colorM", String(layer.color.m));
+        el.setAttribute("colorY", String(layer.color.y));
+        el.setAttribute("colorK", String(layer.color.k));
+        const isBuiltin = BUILTIN_FONTS.some((f) => f.value === layer.fontFamily);
+        if (isBuiltin){
+          el.setAttribute("fontSource", "builtin");
+          el.setAttribute("fontFamily", layer.fontFamily);
+        } else {
+          el.setAttribute("fontSource", "custom");
+          const info = fontFilesMap.get(layer.fontFamily);
+          if (info){
+            el.setAttribute("fontFile", "fonts/" + info.filename);
+            el.setAttribute("fontLabel", info.label);
+          }
+        }
+        const contentEl = doc.createElement("content");
+        contentEl.appendChild(doc.createCDATASection(layer.text || ""));
+        el.appendChild(contentEl);
+      }
+      layersEl.appendChild(el);
+    });
+    root.appendChild(layersEl);
+
+    return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(doc);
+  }
+
+  // ---- export: zip containing the JPG mockup, full-layers PNG, a PNG of each individual ----
+  // ---- layer, project.xml (position/size/stacking + background shape), and originals    ----
   function exportZip(){
     if (!layers.length || !bg){
       alert("Add at least one image layer first.");
@@ -2800,27 +2922,65 @@
         buildFullLayersPNGBlob((pngBlob, pngErr) => {
           if (pngErr){ alert(pngErr); resetDownloadZipBtn(); return; }
 
-          const zip = new JSZip();
-          zip.file(buildExportFilename("jpg"), jpgBlob);
-          zip.file(buildExportFilename("png", "full-layers"), pngBlob);
+          const nonImageLayers = layers.filter((l) => l.type !== "image");
+          Promise.all(nonImageLayers.map((layer) => new Promise((resolve, reject) => {
+            buildSingleLayerPNGBlob(layer, (blob, err) => {
+              if (err) reject(new Error(err)); else resolve({ layer, blob });
+            });
+          }))).then((rendered) => {
+            const zip = new JSZip();
+            zip.file(buildExportFilename("jpg"), jpgBlob);
+            zip.file(buildExportFilename("png", "full-layers"), pngBlob);
 
-          const imageLayers = layers.filter((l) => l.type === "image");
-          if (imageLayers.length){
             const originalsFolder = zip.folder("original-images");
             const usedNames = new Set();
-            imageLayers.forEach((layer) => {
+            const assetFilenames = new Map(); // layer.id -> filename inside original-images/
+
+            layers.forEach((layer) => {
+              if (layer.type !== "image") return;
               const blob = dataURLtoBlob(layer.dataURL);
               let name = layer.name || `layer.${extFromMime(blob.type)}`;
               if (!/\.[a-z0-9]+$/i.test(name)) name += `.${extFromMime(blob.type)}`;
-              originalsFolder.file(uniqueZipName(usedNames, name), blob);
+              name = uniqueZipName(usedNames, name);
+              originalsFolder.file(name, blob);
+              assetFilenames.set(layer.id, name);
             });
-          }
+            rendered.forEach(({ layer, blob }) => {
+              const name = uniqueZipName(usedNames, layerAssetBaseName(layer) + ".png");
+              originalsFolder.file(name, blob);
+              assetFilenames.set(layer.id, name);
+            });
 
-          zip.generateAsync({ type: "blob" }).then((zipBlob) => {
-            triggerDownload(zipBlob, buildExportFilename("zip"));
-            resetDownloadZipBtn();
+            // custom (uploaded, non-Google) fonts actually used by a text layer
+            const fontFilesMap = new Map(); // familyName -> { filename, label }
+            const usedFontNames = new Set();
+            let fontsFolder = null;
+            layers.forEach((layer) => {
+              if (layer.type !== "text") return;
+              const isBuiltin = BUILTIN_FONTS.some((f) => f.value === layer.fontFamily);
+              if (isBuiltin || fontFilesMap.has(layer.fontFamily)) return;
+              const faces = customFonts[layer.fontFamily];
+              if (!faces || !faces.length) return;
+              if (!fontsFolder) fontsFolder = zip.folder("fonts");
+              const label = customFontLabels[layer.fontFamily] || layer.fontFamily;
+              const blob = dataURLtoBlob(faces[0].dataURL);
+              const ext = /otf/i.test(blob.type) ? "otf" : "ttf";
+              const filename = uniqueZipName(usedFontNames, layer.fontFamily.replace(/[^a-z0-9-]+/gi, "_") + "." + ext);
+              fontsFolder.file(filename, blob);
+              fontFilesMap.set(layer.fontFamily, { filename, label });
+            });
+
+            zip.file("project.xml", buildProjectXML(assetFilenames, fontFilesMap));
+
+            zip.generateAsync({ type: "blob" }).then((zipBlob) => {
+              triggerDownload(zipBlob, buildExportFilename("zip"));
+              resetDownloadZipBtn();
+            }).catch(() => {
+              alert("Export failed while creating the zip file.");
+              resetDownloadZipBtn();
+            });
           }).catch(() => {
-            alert("Export failed while creating the zip file.");
+            alert("Export failed while rendering one of the layers.");
             resetDownloadZipBtn();
           });
         });
@@ -2834,6 +2994,200 @@
   }
 
   downloadZipBtn.addEventListener("click", exportZip);
+
+  // ---- import: re-create the editor from a previously exported project zip ----
+  function mimeFromExt(path){
+    const ext = (path.split(".").pop() || "").toLowerCase();
+    const map = { png:"image/png", jpg:"image/jpeg", jpeg:"image/jpeg", gif:"image/gif", webp:"image/webp", svg:"image/svg+xml", ttf:"font/ttf", otf:"font/otf" };
+    return map[ext] || "application/octet-stream";
+  }
+
+  function zipFileToDataURL(zip, path){
+    const entry = path && zip.file(path);
+    if (!entry) return Promise.resolve(null);
+    return entry.async("base64").then((b64) => `data:${mimeFromExt(path)};base64,${b64}`);
+  }
+
+  // builds one layer object (without a runtime id) from a <layer> element of project.xml,
+  // resolving any referenced asset (image data / custom font file) out of the zip first.
+  function buildLayerFromXML(el, zip, fontImportCache){
+    const type = el.getAttribute("type");
+    const xform = {
+      cx: parseFloat(el.getAttribute("cx")) || 0,
+      cy: parseFloat(el.getAttribute("cy")) || 0,
+      scale: parseFloat(el.getAttribute("scale")) || 1,
+      rot: parseFloat(el.getAttribute("rotation")) || 0
+    };
+    const opacity = el.hasAttribute("opacity") ? parseFloat(el.getAttribute("opacity")) : 100;
+    const naturalW = parseFloat(el.getAttribute("naturalWidth")) || 10;
+    const naturalH = parseFloat(el.getAttribute("naturalHeight")) || 10;
+
+    if (type === "image"){
+      return zipFileToDataURL(zip, el.getAttribute("file")).then((dataURL) => {
+        if (!dataURL) return null;
+        const origW = el.hasAttribute("origNaturalWidth") ? parseFloat(el.getAttribute("origNaturalWidth")) : naturalW;
+        const origH = el.hasAttribute("origNaturalHeight") ? parseFloat(el.getAttribute("origNaturalHeight")) : naturalH;
+        return {
+          type: "image",
+          name: el.getAttribute("name") || "image.png",
+          naturalW, naturalH,
+          origNaturalW: origW, origNaturalH: origH,
+          dataURL,
+          opacity,
+          xform,
+          fitScale: 1
+        };
+      });
+    }
+
+    const c = parseFloat(el.getAttribute("colorC")) || 0;
+    const m = parseFloat(el.getAttribute("colorM")) || 0;
+    const y = parseFloat(el.getAttribute("colorY")) || 0;
+    const k = el.hasAttribute("colorK") ? parseFloat(el.getAttribute("colorK")) : 100;
+    const color = { c, m, y, k };
+    const fillColor = cmykToHex(c, m, y, k);
+
+    if (type === "shape"){
+      return Promise.resolve({
+        type: "shape",
+        shapeKind: el.getAttribute("shapeKind") || "rectangle",
+        filled: el.getAttribute("filled") !== "false",
+        strokeWidth: parseFloat(el.getAttribute("strokeWidth")) || 6,
+        color, fillColor,
+        opacity,
+        naturalW, naturalH,
+        xform,
+        fitScale: 1
+      });
+    }
+
+    if (type === "text"){
+      const contentEl = el.querySelector("content");
+      const layer = {
+        type: "text",
+        text: contentEl ? contentEl.textContent : "",
+        color, fillColor,
+        opacity,
+        xform,
+        fitScale: 1
+      };
+      const fontFile = el.getAttribute("fontFile");
+      if (el.getAttribute("fontSource") === "custom" && fontFile){
+        let p = fontImportCache.get(fontFile);
+        if (!p){
+          p = zipFileToDataURL(zip, fontFile).then((dataURL) => new Promise((resolve) => {
+            if (!dataURL){ resolve(BUILTIN_FONTS[0].value); return; }
+            const label = el.getAttribute("fontLabel") || "Custom font";
+            const familyName = "UserFont" + (++customFontCounter) + "-" + label.replace(/[^a-z0-9]+/gi, "").slice(0, 24);
+            registerCustomFont(familyName, dataURL);
+            addCustomFontOption(familyName, label);
+            loadFontAndThen(familyName, () => resolve(familyName));
+          }));
+          fontImportCache.set(fontFile, p);
+        }
+        return p.then((familyName) => {
+          layer.fontFamily = familyName;
+          measureTextLayer(layer);
+          return layer;
+        });
+      }
+      layer.fontFamily = el.getAttribute("fontFamily") || BUILTIN_FONTS[0].value;
+      measureTextLayer(layer);
+      return Promise.resolve(layer);
+    }
+
+    return Promise.resolve(null);
+  }
+
+  function applyImportedProject(shapeValue, wantLevelView, newLayers){
+    const shape = BUILTIN_SHAPES[shapeValue] || BUILTIN_SHAPES.left;
+    currentShapeLabel = shape.label;
+    shapeSelect.value = BUILTIN_SHAPES[shapeValue] ? shapeValue : "left";
+    updatePreviewFadeUI();
+    parseAndLoadBackground(shape.svg);
+
+    levelView = !!wantLevelView && !levelViewCheckbox.disabled;
+    levelViewCheckbox.checked = levelView;
+
+    layers = newLayers.map((l) => {
+      l.id = ++layerIdCounter;
+      if (bg) l.fitScale = Math.max(bg.clipBBoxRect.w/l.naturalW, bg.clipBBoxRect.h/l.naturalH) || 1;
+      return l;
+    });
+    selectedLayerId = layers.length ? layers[layers.length - 1].id : null;
+
+    renderLayerList();
+    buildStage();
+    setInitialView();
+    syncZoomSlider();
+    syncRotationSlider();
+    updateControlsEnabled();
+    syncTextControls();
+  }
+
+  function importProjectZip(file){
+    if (!file) return;
+    if (layers.length && !confirm("Loading this project will replace your current layers. Continue?")) return;
+    projectZipDropzone.classList.add("dragover");
+    JSZip.loadAsync(file).then((zip) => {
+      const xmlEntry = zip.file("project.xml");
+      if (!xmlEntry) throw new Error("This zip doesn't contain a project.xml — it doesn't look like a Grip Customizer export.");
+      return xmlEntry.async("string").then((xmlText) => {
+        const doc = new DOMParser().parseFromString(xmlText, "application/xml");
+        if (doc.querySelector("parsererror")) throw new Error("Couldn't parse project.xml in that zip.");
+        const root = doc.documentElement;
+        const bgEl = root.querySelector("background");
+        const shapeValue = bgEl ? bgEl.getAttribute("shape") : null;
+        const wantLevelView = bgEl ? bgEl.getAttribute("levelView") === "true" : false;
+        const layerEls = Array.from(root.querySelectorAll("layers > layer"));
+        const fontImportCache = new Map();
+        return Promise.all(layerEls.map((el) => buildLayerFromXML(el, zip, fontImportCache)))
+          .then((newLayers) => ({ shapeValue, wantLevelView, newLayers: newLayers.filter(Boolean) }));
+      });
+    }).then(({ shapeValue, wantLevelView, newLayers }) => {
+      applyImportedProject(shapeValue, wantLevelView, newLayers);
+    }).catch((err) => {
+      console.error(err);
+      alert("Couldn't load that project zip. " + (err && err.message ? err.message : ""));
+    }).then(() => {
+      projectZipDropzone.classList.remove("dragover");
+    });
+  }
+
+  projectZipInput.addEventListener("change", (e) => {
+    const file = e.target.files && e.target.files[0];
+    importProjectZip(file);
+    projectZipInput.value = "";
+  });
+
+  projectZipDropzone.addEventListener("click", () => projectZipInput.click());
+  projectZipDropzone.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " "){
+      e.preventDefault();
+      projectZipInput.click();
+    }
+  });
+  ["dragenter","dragover"].forEach((evt) => {
+    projectZipDropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      projectZipDropzone.classList.add("dragover");
+    });
+  });
+  ["dragleave","dragend"].forEach((evt) => {
+    projectZipDropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      projectZipDropzone.classList.remove("dragover");
+    });
+  });
+  projectZipDropzone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    projectZipDropzone.classList.remove("dragover");
+    const file = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+    importProjectZip(file);
+  });
 
   // ---- init ----
   BUILTIN_FONTS.forEach((f) => {
