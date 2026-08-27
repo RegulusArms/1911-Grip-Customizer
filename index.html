@@ -333,17 +333,11 @@
     border-color:#fff;
   }
   .handle.edge{
-    border-radius:4px;
+    width:16px;
+    height:16px;
+    border-radius:50%;
     background:var(--accent);
     border-color:#fff;
-  }
-  .handle.edge-h{
-    width:10px;
-    height:18px;
-  }
-  .handle.edge-v{
-    width:18px;
-    height:10px;
   }
   .shape-btn-grid{
     display:grid;
@@ -370,7 +364,7 @@
 <div class="app">
   <aside class="panel">
     <h1>Grip Customizer</h1>
-    <p class="sub">Upload one or more images or add text layers, then drag to move, use the corner handles to resize, and the top handle (or shift + scroll, or the [ ] keys) to rotate. Layers only show through the colored area of the shape. Reorder layers by dragging them in the list below.</p>
+    <p class="sub">Upload one or more images or add text layers, then drag to move, use the corner handles to resize, and the top handle (or shift + scroll, or the [ ] keys) to rotate. Drag the edge bubbles on an image or shape to stretch it in that direction. Layers only show through the colored area of the shape. Reorder layers by dragging them in the list below.</p>
 
     <div class="field">
       <label for="imageInput">Add image layer</label>
@@ -408,6 +402,9 @@
     </div>
 
     <div id="imageFieldsGroup" style="display:none;margin-bottom:18px;">
+      <div class="btn-row" style="margin-bottom:8px;">
+        <button class="btn" id="resetImageSizeBtn" style="width:100%;">Reset size &amp; aspect ratio</button>
+      </div>
       <div class="btn-row">
         <button class="btn" id="removeBgBtn">Remove background</button>
         <button class="btn" id="restoreOriginalBtn" style="display:none;">Restore original</button>
@@ -541,14 +538,14 @@
         <div class="handle corner" id="handle-tr" style="cursor:nesw-resize;"></div>
         <div class="handle corner" id="handle-br" style="cursor:nwse-resize;"></div>
         <div class="handle corner" id="handle-bl" style="cursor:nesw-resize;"></div>
-        <div class="handle edge edge-v" id="handle-top" title="Stretch" style="cursor:ns-resize;"></div>
-        <div class="handle edge edge-v" id="handle-bottom" title="Stretch" style="cursor:ns-resize;"></div>
-        <div class="handle edge edge-h" id="handle-left" title="Stretch" style="cursor:ew-resize;"></div>
-        <div class="handle edge edge-h" id="handle-right" title="Stretch" style="cursor:ew-resize;"></div>
+        <div class="handle edge" id="handle-top" title="Stretch" style="cursor:ns-resize;"></div>
+        <div class="handle edge" id="handle-bottom" title="Stretch" style="cursor:ns-resize;"></div>
+        <div class="handle edge" id="handle-left" title="Stretch" style="cursor:ew-resize;"></div>
+        <div class="handle edge" id="handle-right" title="Stretch" style="cursor:ew-resize;"></div>
         <div class="handle rotate" id="handle-rotate" title="Rotate"></div>
       </div>
     </div>
-    <p class="hint">Add a image, drag inside the outline to move it, drag a corner to resize. Rotate by dragging the blue dot above it, holding shift while scrolling over the image, or pressing the [ and ] keys. Scroll to zoom the workspace, or hold the middle mouse button to pan it.</p>
+    <p class="hint">Add a image, drag inside the outline to move it, drag a corner to resize, or drag one of the side bubbles to stretch it in that direction. Rotate by dragging the blue dot above it, holding shift while scrolling over the image, or pressing the [ and ] keys. Scroll to zoom the workspace, or hold the middle mouse button to pan it.</p>
   </main>
 </div>
 
@@ -677,6 +674,7 @@
   const fitBtn = document.getElementById("fitBtn");
   const removeImgBtn = document.getElementById("removeImgBtn");
   const imageFieldsGroup = document.getElementById("imageFieldsGroup");
+  const resetImageSizeBtn = document.getElementById("resetImageSizeBtn");
   const removeBgBtn = document.getElementById("removeBgBtn");
   const restoreOriginalBtn = document.getElementById("restoreOriginalBtn");
   const removeBgStatus = document.getElementById("removeBgStatus");
@@ -1618,8 +1616,9 @@
     placeHandle("handle-bl", corners.bl);
     placeHandle("handle-rotate", rotStage);
 
-    // stretch/smoosh (non-uniform resize) handles — shapes only
-    const canStretch = selected.type === "shape";
+    // stretch/smoosh (non-uniform resize) handles — shapes and images (images already
+    // render with preserveAspectRatio="none", so independent w/h "just works")
+    const canStretch = selected.type === "shape" || selected.type === "image";
     ["handle-top","handle-bottom","handle-left","handle-right"].forEach((id) => {
       document.getElementById(id).style.display = canStretch ? "block" : "none";
     });
@@ -1727,17 +1726,18 @@
   }
   ["handle-tl","handle-tr","handle-br","handle-bl"].forEach(attachCornerHandle);
 
-  // ---- dragging: stretch/smoosh a single side (non-uniform resize, shape layers only) ----
-  // moving one edge grows/shrinks that dimension by the pointer's movement along that edge's
-  // local axis, while the opposite edge stays put — the layer's center shifts by half the
-  // change to keep the fixed edge fixed, matching typical "resize handle" behavior.
-  const MIN_SHAPE_SIZE = 4;
+  // ---- dragging: stretch/smoosh a single side (non-uniform resize, shape and image ----
+  // layers) ---- moving one edge grows/shrinks that dimension by the pointer's movement
+  // along that edge's local axis, while the opposite edge stays put — the layer's center
+  // shifts by half the change to keep the fixed edge fixed, matching typical "resize
+  // handle" behavior.
+  const MIN_STRETCH_SIZE = 4;
   function attachEdgeHandle(id, dim, sign){
     const el = document.getElementById(id);
     el.addEventListener("pointerdown", (e) => {
       if (e.button !== 0) return;
       const selected = getSelectedLayer();
-      if (!selected || selected.type !== "shape") return;
+      if (!selected || (selected.type !== "shape" && selected.type !== "image")) return;
       e.preventDefault();
       e.stopPropagation();
       const start = stagePointFromEvent(e);
@@ -1750,7 +1750,7 @@
         const cur = stagePointFromEvent(ev);
         const dProj = ((cur.x - start.x) * axis.x + (cur.y - start.y) * axis.y) / scale;
         const startSize = dim === "w" ? startW : startH;
-        const newSize = Math.max(MIN_SHAPE_SIZE, startSize + sign * dProj);
+        const newSize = Math.max(MIN_STRETCH_SIZE, startSize + sign * dProj);
         const appliedDelta = sign * (newSize - startSize);
         if (dim === "w") selected.naturalW = newSize; else selected.naturalH = newSize;
         const centerShift = appliedDelta / 2;
@@ -2074,6 +2074,8 @@
             name: file.name || ("Layer " + layerIdCounter),
             naturalW: tmp.naturalWidth || 300,
             naturalH: tmp.naturalHeight || 300,
+            origNaturalW: tmp.naturalWidth || 300,
+            origNaturalH: tmp.naturalHeight || 300,
             dataURL,
             opacity: 100,
             xform: { cx:0, cy:0, scale:1, rot:0 },
@@ -2262,6 +2264,14 @@
       img.src = dataURL;
     }));
   }
+
+  resetImageSizeBtn.addEventListener("click", () => {
+    const layer = getSelectedLayer();
+    if (!layer || layer.type !== "image" || layer.origNaturalW == null) return;
+    layer.naturalW = layer.origNaturalW;
+    layer.naturalH = layer.origNaturalH;
+    buildStage();
+  });
 
   removeBgBtn.addEventListener("click", () => {
     const layer = getSelectedLayer();
