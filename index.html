@@ -170,6 +170,32 @@
     text-align:right;
     flex:0 0 auto;
   }
+  .cmyk-inputs{
+    display:flex;
+    gap:6px;
+    margin-top:8px;
+  }
+  .cmyk-inputs .cmyk-input-field{
+    flex:1 1 0;
+    display:flex;
+    flex-direction:column;
+    gap:2px;
+  }
+  .cmyk-inputs label{
+    font-size:11px;
+    font-weight:600;
+    color:var(--muted);
+    text-align:center;
+  }
+  .cmyk-inputs input[type="number"]{
+    width:100%;
+    padding:5px 4px;
+    font-size:12px;
+    text-align:center;
+    border-radius:6px;
+    border:1px solid var(--panel-border);
+    font-family:inherit;
+  }
   .color-swatch{
     width:24px;
     height:24px;
@@ -474,6 +500,24 @@
           <input type="range" id="cmykK" min="0" max="100" value="100" step="1">
           <span class="val" id="cmykKVal">100%</span>
         </div>
+        <div class="cmyk-inputs">
+          <div class="cmyk-input-field">
+            <label for="cmykCInput">C</label>
+            <input type="number" id="cmykCInput" min="0" max="100" step="1" value="0">
+          </div>
+          <div class="cmyk-input-field">
+            <label for="cmykMInput">M</label>
+            <input type="number" id="cmykMInput" min="0" max="100" step="1" value="0">
+          </div>
+          <div class="cmyk-input-field">
+            <label for="cmykYInput">Y</label>
+            <input type="number" id="cmykYInput" min="0" max="100" step="1" value="0">
+          </div>
+          <div class="cmyk-input-field">
+            <label for="cmykKInput">K</label>
+            <input type="number" id="cmykKInput" min="0" max="100" step="1" value="100">
+          </div>
+        </div>
         <div class="row" style="margin-top:8px;">
           <span style="font-size:12px;color:var(--muted);">Preview</span>
           <span class="color-swatch" id="colorSwatch"></span>
@@ -711,6 +755,10 @@
   const colorWheelDot = document.getElementById("colorWheelDot");
   const cmykK = document.getElementById("cmykK");
   const cmykKVal = document.getElementById("cmykKVal");
+  const cmykCInput = document.getElementById("cmykCInput");
+  const cmykMInput = document.getElementById("cmykMInput");
+  const cmykYInput = document.getElementById("cmykYInput");
+  const cmykKInput = document.getElementById("cmykKInput");
   const colorSwatch = document.getElementById("colorSwatch");
   const cmykReadout = document.getElementById("cmykReadout");
   const opacityRange = document.getElementById("opacityRange");
@@ -790,7 +838,40 @@
     const c = Math.round(layer.color.c), m = Math.round(layer.color.m), y = Math.round(layer.color.y), k = Math.round(layer.color.k);
     cmykReadout.textContent = `C${c} M${m} Y${y} K${k}`;
     colorSwatch.style.background = layer.fillColor;
+    if (document.activeElement !== cmykCInput) cmykCInput.value = c;
+    if (document.activeElement !== cmykMInput) cmykMInput.value = m;
+    if (document.activeElement !== cmykYInput) cmykYInput.value = y;
+    if (document.activeElement !== cmykKInput) cmykKInput.value = k;
   }
+
+  // ---- CMYK number inputs: typing exact C/M/Y/K values ----
+  function applyCmykFromInputs(){
+    const selected = getSelectedLayer();
+    if (!isColorableLayer(selected)) return;
+    const clamp = (v) => Math.max(0, Math.min(100, isNaN(v) ? 0 : v));
+    const c = clamp(parseFloat(cmykCInput.value));
+    const m = clamp(parseFloat(cmykMInput.value));
+    const y = clamp(parseFloat(cmykYInput.value));
+    const k = clamp(parseFloat(cmykKInput.value));
+    selected.color = { c, m, y, k };
+    selected.fillColor = cmykToHex(c, m, y, k);
+    const rgb = { r: 1 - c/100, g: 1 - m/100, b: 1 - y/100 };
+    const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
+    positionWheelDot(hsv.h, hsv.s);
+    cmykK.value = k;
+    cmykKVal.textContent = k + "%";
+    updateColorReadout(selected);
+    buildStage();
+  }
+
+  [cmykCInput, cmykMInput, cmykYInput, cmykKInput].forEach((input) => {
+    input.addEventListener("input", applyCmykFromInputs);
+    input.addEventListener("change", () => {
+      const clamp = (v) => Math.max(0, Math.min(100, isNaN(v) ? 0 : v));
+      input.value = clamp(parseFloat(input.value));
+      applyCmykFromInputs();
+    });
+  });
 
   function setColorFromWheel(hue, sat){
     const selected = getSelectedLayer();
