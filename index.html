@@ -138,6 +138,19 @@
     color:#fff;
     border-color:var(--accent);
   }
+  .dropper-btn{
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:26px;
+    height:26px;
+    padding:0;
+    flex:0 0 auto;
+  }
+  .dropper-btn svg{
+    width:14px;
+    height:14px;
+  }
   .checkbox-row{
     display:flex;
     align-items:center;
@@ -489,7 +502,18 @@
 
     <div id="colorFieldsGroup" style="display:none;">
       <div class="field">
-        <label>Color (CMYK)</label>
+        <label style="display:flex;align-items:center;justify-content:space-between;">
+          <span>Color (CMYK)</span>
+          <button type="button" class="btn dropper-btn" id="colorDropperBtn" title="Pick color from canvas" aria-label="Pick color from canvas">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <rect x="13.5" y="2.5" width="6" height="6" rx="1.5" transform="rotate(45 16.5 5.5)"></rect>
+                <line x1="14.5" y1="7.5" x2="6" y2="16"></line>
+              </g>
+              <circle cx="5" cy="17" r="1.7" fill="currentColor"></circle>
+            </svg>
+          </button>
+        </label>
         <div class="color-wheel-wrap">
           <div class="color-wheel" id="colorWheel" role="slider" aria-label="Color hue and saturation" tabindex="0">
             <div class="color-wheel-dot" id="colorWheelDot"></div>
@@ -709,6 +733,9 @@
   let dragSrcLi = null;
   let levelView = false;      // display-only: show the shape rotated so its bottom edge is level
   let previewFadeOn = false;  // display-only: simulate the curved-edge print fade on 1911 grips
+  let colorSamplingActive = false;    // color dropper: hovering the stage previews a sampled color
+  let sampleCanvasCtx = null;         // 2D context of the offscreen raster snapshot used for sampling
+  let sampleCanvasScale = { x:1, y:1 }; // bg-space units -> sample canvas pixels
   const view = { scale: 1, tx: 0, ty: 0 }; // workspace pan/zoom (CSS transform on #stage, separate from layer xforms)
   const MIN_VIEW_SCALE = 0.25, MAX_VIEW_SCALE = 10;
   let customFonts = {};        // familyName -> array of {dataURL, unicodeRange}
@@ -761,6 +788,7 @@
   const cmykKInput = document.getElementById("cmykKInput");
   const colorSwatch = document.getElementById("colorSwatch");
   const cmykReadout = document.getElementById("cmykReadout");
+  const colorDropperBtn = document.getElementById("colorDropperBtn");
   const opacityRange = document.getElementById("opacityRange");
   const opacityLabel = document.getElementById("opacityLabel");
   const addShapeButtons = document.querySelectorAll("[data-shape-kind]");
@@ -897,6 +925,102 @@
     let hue = Math.atan2(dx, -dy) * 180 / Math.PI;
     if (hue < 0) hue += 360;
     return { hue, sat };
+  }
+
+  // ---- color dropper: sample a pixel from the rendered canvas and feed it back into ----
+  // ---- the same hue/sat-wheel-plus-K-slider model the color wheel itself uses, so    ----
+  // ---- the result can be fine-tuned normally afterward.                              ----
+  function rgbToWheelState(r, g, b){
+    const k = 1 - Math.max(r, g, b);
+    let hue = 0, sat = 0;
+    if (k < 0.999){
+      const inv = 1 - k;
+      const hsv = rgbToHsv(r / inv, g / inv, b / inv);
+      hue = hsv.h; sat = hsv.s;
+    }
+    return { hue, sat, k: Math.max(0, Math.min(100, k * 100)) };
+  }
+
+  // renders a fresh, unrotated snapshot of exactly what's visible inside the shape
+  // (background fill + clipped layer stack) into an offscreen canvas that pixels can be
+  // read back from — the same composite buildJPGBlob() rasterizes for export.
+  function startColorSampling(){
+    const selected = getSelectedLayer();
+    if (!isColorableLayer(selected) || !bg) return;
+    colorSamplingActive = true;
+    sampleCanvasCtx = null;
+    colorDropperBtn.classList.add("active");
+    stageContainer.style.cursor = "crosshair";
+
+    const outSvg = buildClippedLayersSvg();
+    const svgString = new XMLSerializer().serializeToString(outSvg);
+    let svg64;
+    try{
+      svg64 = btoa(unescape(encodeURIComponent(svgString)));
+    }catch(e){
+      exitColorSampling(true);
+      return;
+    }
+    const dataUrl = "data:image/svg+xml;base64," + svg64;
+    const longSide = Math.max(bg.w, bg.h);
+    const scale = Math.max(1, Math.min(8, Math.round(2000 / longSide)));
+    const canvasW = Math.max(1, Math.round(bg.w * scale));
+    const canvasH = Math.max(1, Math.round(bg.h * scale));
+
+    const im = new Image();
+    im.onload = () => {
+      if (!colorSamplingActive) return; // cancelled while the snapshot was loading
+      const canvas = document.createElement("canvas");
+      canvas.width = canvasW;
+      canvas.height = canvasH;
+      const ctx = canvas.getContext("2d", { willReadFrequently: true });
+      ctx.drawImage(im, 0, 0, canvasW, canvasH);
+      sampleCanvasCtx = ctx;
+      sampleCanvasScale = { x: canvasW / bg.w, y: canvasH / bg.h };
+    };
+    im.onerror = () => exitColorSampling(true);
+    im.src = dataUrl;
+  }
+
+  function exitColorSampling(restore){
+    colorSamplingActive = false;
+    sampleCanvasCtx = null;
+    colorDropperBtn.classList.remove("active");
+    stageContainer.style.cursor = "";
+    if (restore) syncColorControls(); // undo any live preview, back to the layer's real color
+  }
+
+  // reads the pixel under the pointer and previews it on the wheel/readout; on commit it's
+  // written into the selected layer's actual color and sampling mode exits.
+  function sampleColorAt(evt, commit){
+    if (!sampleCanvasCtx) return;
+    const p = stagePointFromEvent(evt);
+    const px = Math.floor(p.x * sampleCanvasScale.x);
+    const py = Math.floor(p.y * sampleCanvasScale.y);
+    const canvas = sampleCanvasCtx.canvas;
+    if (px < 0 || py < 0 || px >= canvas.width || py >= canvas.height) return;
+    const data = sampleCanvasCtx.getImageData(px, py, 1, 1).data;
+    if (data[3] === 0) return; // nothing painted there - leave the preview as-is
+
+    const state = rgbToWheelState(data[0]/255, data[1]/255, data[2]/255);
+    const rgbPure = hsvToRgb(state.hue, state.sat, 1);
+    const c = (1 - rgbPure.r) * 100, m = (1 - rgbPure.g) * 100, y = (1 - rgbPure.b) * 100, k = state.k;
+    const fillColor = cmykToHex(c, m, y, k);
+
+    positionWheelDot(state.hue, state.sat);
+    cmykK.value = k;
+    cmykKVal.textContent = Math.round(k) + "%";
+    updateColorReadout({ color: { c, m, y, k }, fillColor });
+
+    if (commit){
+      const selected = getSelectedLayer();
+      if (isColorableLayer(selected)){
+        selected.color = { c, m, y, k };
+        selected.fillColor = fillColor;
+        buildStage();
+      }
+      exitColorSampling(false);
+    }
   }
 
   function createTextElement(layer){
@@ -2051,7 +2175,10 @@
     const selected = getSelectedLayer();
     const colorable = isColorableLayer(selected);
     colorFieldsGroup.style.display = colorable ? "" : "none";
-    if (!colorable) return;
+    if (!colorable){
+      if (colorSamplingActive) exitColorSampling(false); // nothing colorable to sample into anymore
+      return;
+    }
     const rgb = { r: 1 - selected.color.c/100, g: 1 - selected.color.m/100, b: 1 - selected.color.y/100 };
     const hsv = rgbToHsv(rgb.r, rgb.g, rgb.b);
     positionWheelDot(hsv.h, hsv.s);
@@ -2480,6 +2607,39 @@
     cmykKVal.textContent = k + "%";
     updateColorReadout(selected);
     buildStage();
+  });
+
+  // ---- events: color dropper ----
+  colorDropperBtn.addEventListener("click", () => {
+    if (colorSamplingActive){ exitColorSampling(true); return; }
+    startColorSampling();
+  });
+
+  stageContainer.addEventListener("pointermove", (e) => {
+    if (!colorSamplingActive) return;
+    sampleColorAt(e, false);
+  });
+
+  // capture phase on the ancestor so this fires (and can stop the event) before it ever
+  // reaches #stage's own pointerdown listener, which would otherwise select/drag a layer.
+  stageContainer.addEventListener("pointerdown", (e) => {
+    if (!colorSamplingActive) return;
+    if (e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    sampleColorAt(e, true);
+  }, true);
+
+  stageContainer.addEventListener("pointerleave", () => {
+    if (!colorSamplingActive) return;
+    syncColorControls(); // preview only follows the pointer while it's over the canvas
+  });
+
+  window.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && colorSamplingActive){
+      e.preventDefault();
+      exitColorSampling(true);
+    }
   });
 
   // ---- events: opacity (shared across image / text / shape layers) ----
