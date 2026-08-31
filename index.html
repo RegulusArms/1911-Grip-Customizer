@@ -2368,38 +2368,97 @@
     if (!files.length) return;
     files.forEach((file) => {
       const reader = new FileReader();
-      reader.onload = (ev) => {
-        const dataURL = ev.target.result;
-        const tmp = new Image();
-        tmp.onload = () => {
-          const layer = {
-            id: ++layerIdCounter,
-            type: "image",
-            name: file.name || ("Layer " + layerIdCounter),
-            naturalW: tmp.naturalWidth || 300,
-            naturalH: tmp.naturalHeight || 300,
-            origNaturalW: tmp.naturalWidth || 300,
-            origNaturalH: tmp.naturalHeight || 300,
-            dataURL,
-            opacity: 100,
-            xform: { cx:0, cy:0, scale:1, rot:0 },
-            fitScale: 1
-          };
-          layers.push(layer);
-          if (bg) fitTransform(layer);
-          selectedLayerId = layer.id;
-          renderLayerList();
-          buildStage();
-          syncZoomSlider();
-          syncRotationSlider();
-          updateControlsEnabled();
-          syncTextControls();
-        };
-        tmp.onerror = () => alert("Couldn't read " + (file.name || "that image") + ".");
-        tmp.src = dataURL;
-      };
+      reader.onload = (ev) => loadImageLayer(file, ev.target.result);
       reader.onerror = () => alert("Couldn't read " + (file.name || "that file") + ".");
       reader.readAsDataURL(file);
+    });
+  }
+
+  function finishImageLayer(file, dataURL, tmp){
+    const layer = {
+      id: ++layerIdCounter,
+      type: "image",
+      name: file.name || ("Layer " + layerIdCounter),
+      naturalW: tmp.naturalWidth || 300,
+      naturalH: tmp.naturalHeight || 300,
+      origNaturalW: tmp.naturalWidth || 300,
+      origNaturalH: tmp.naturalHeight || 300,
+      dataURL,
+      opacity: 100,
+      xform: { cx:0, cy:0, scale:1, rot:0 },
+      fitScale: 1
+    };
+    layers.push(layer);
+    if (bg) fitTransform(layer);
+    selectedLayerId = layer.id;
+    renderLayerList();
+    buildStage();
+    syncZoomSlider();
+    syncRotationSlider();
+    updateControlsEnabled();
+    syncTextControls();
+  }
+
+  // Some CMYK/YCCK-color JPEGs (common in print-ready art exported from
+  // Photoshop/Illustrator) fail to decode via the native <img> decoder in
+  // Chromium-based browsers (Chrome, Brave) even though Firefox reads them
+  // fine. Retry those through a pure-JS decoder before giving up.
+  function loadImageLayer(file, dataURL){
+    const tmp = new Image();
+    tmp.onload = () => finishImageLayer(file, dataURL, tmp);
+    tmp.onerror = () => {
+      const looksLikeJpeg = file.type === "image/jpeg" || /\.jpe?g$/i.test(file.name || "");
+      if (!looksLikeJpeg){
+        alert("Couldn't read " + (file.name || "that image") + ".");
+        return;
+      }
+      decodeJpegFallback(file).then((pngDataURL) => {
+        const tmp2 = new Image();
+        tmp2.onload = () => finishImageLayer(file, pngDataURL, tmp2);
+        tmp2.onerror = () => alert("Couldn't read " + (file.name || "that image") + ".");
+        tmp2.src = pngDataURL;
+      }).catch(() => {
+        alert("Couldn't read " + (file.name || "that image") + ". It may be a CMYK-color JPEG that this browser can't open — try re-saving it as RGB, or open it in Firefox.");
+      });
+    };
+    tmp.src = dataURL;
+  }
+
+  const JPEG_JS_CDN_URL = "https://cdn.jsdelivr.net/npm/jpeg-js@0.4.4/lib/decoder.js";
+  let jpegJsLoadPromise = null;
+
+  function loadJpegJs(){
+    if (window["jpeg-js"]) return Promise.resolve(window["jpeg-js"]);
+    if (!jpegJsLoadPromise){
+      jpegJsLoadPromise = new Promise((resolve, reject) => {
+        const script = document.createElement("script");
+        script.src = JPEG_JS_CDN_URL;
+        script.onload = () => resolve(window["jpeg-js"]);
+        script.onerror = () => reject(new Error("Couldn't load the JPEG fallback decoder."));
+        document.head.appendChild(script);
+      });
+    }
+    return jpegJsLoadPromise;
+  }
+
+  function decodeJpegFallback(file){
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        loadJpegJs().then((jpegJs) => {
+          const bytes = new Uint8Array(ev.target.result);
+          const raw = jpegJs.decode(bytes, { useTArray: true, formatAsRGBA: true });
+          const canvas = document.createElement("canvas");
+          canvas.width = raw.width;
+          canvas.height = raw.height;
+          const ctx = canvas.getContext("2d");
+          const imageData = new ImageData(new Uint8ClampedArray(raw.data), raw.width, raw.height);
+          ctx.putImageData(imageData, 0, 0);
+          resolve(canvas.toDataURL("image/png"));
+        }).catch(reject);
+      };
+      reader.onerror = () => reject(new Error("Couldn't read " + (file.name || "that file") + "."));
+      reader.readAsArrayBuffer(file);
     });
   }
 
