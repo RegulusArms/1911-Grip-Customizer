@@ -24,9 +24,72 @@
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
     color:var(--text);
   }
+  body{
+    display:flex;
+    flex-direction:column;
+    height:100vh;
+  }
+  .menubar{
+    flex:0 0 auto;
+    display:flex;
+    align-items:center;
+    height:36px;
+    background:var(--panel-bg);
+    border-bottom:1px solid var(--panel-border);
+    padding:0 6px;
+    font-size:13px;
+    position:relative;
+    z-index:100;
+    user-select:none;
+  }
+  .menu{
+    position:relative;
+  }
+  .menu-btn{
+    display:block;
+    padding:6px 12px;
+    border-radius:6px;
+    cursor:pointer;
+    background:transparent;
+  }
+  .menu-btn:hover, .menu.open .menu-btn{
+    background:#f2f3f5;
+  }
+  .menu-btn:disabled{
+    opacity:.4;
+    cursor:not-allowed;
+    background:transparent;
+  }
+  .menu-dropdown{
+    display:none;
+    position:absolute;
+    top:100%;
+    left:0;
+    margin-top:2px;
+    min-width:200px;
+    background:#fff;
+    border:1px solid var(--panel-border);
+    border-radius:8px;
+    box-shadow:0 4px 16px rgba(0,0,0,.14);
+    padding:6px;
+  }
+  .menu.open .menu-dropdown{
+    display:block;
+  }
+  .menu-item{
+    padding:8px 10px;
+    border-radius:6px;
+    cursor:pointer;
+    font-size:13px;
+    white-space:nowrap;
+  }
+  .menu-item:hover{
+    background:#f2f3f5;
+  }
   .app{
     display:flex;
-    height:100vh;
+    flex:1 1 auto;
+    min-height:0;
     align-items:stretch;
   }
   .panel{
@@ -37,6 +100,10 @@
     padding:20px 18px;
     overflow-y:auto;
     min-height:0;
+  }
+  .panel-right{
+    border-right:none;
+    border-left:1px solid var(--panel-border);
   }
   .panel h1{
     font-size:17px;
@@ -340,6 +407,10 @@
     background-color:#fff;
     touch-action:none;
   }
+  .stage-container.dragover{
+    outline:3px dashed var(--accent);
+    outline-offset:-3px;
+  }
   #stage{
     display:block;
     width:100%;
@@ -394,16 +465,25 @@
   }
   @media (max-width:760px){
     .app{flex-direction:column;height:auto;min-height:100vh;}
-    .panel{width:auto;flex:none;border-right:none;border-bottom:1px solid var(--panel-border);overflow-y:visible;max-height:none;}
+    .panel{width:auto;flex:none;border-right:none;border-left:none;border-bottom:1px solid var(--panel-border);overflow-y:visible;max-height:none;}
     .stage-container{height:80vh;}
   }
 </style>
 </head>
 <body>
+<div class="menubar">
+  <div class="menu" id="fileMenu">
+    <button type="button" class="menu-btn" id="fileMenuBtn" aria-haspopup="true" aria-expanded="false">File</button>
+    <div class="menu-dropdown" id="fileMenuDropdown" role="menu">
+      <div class="menu-item" id="loadProjectZipMenuItem" role="menuitem">Load Project ZIP…</div>
+    </div>
+  </div>
+  <button type="button" class="menu-btn" id="saveZipMenuBtn" disabled>Save</button>
+</div>
 <div class="app">
   <aside class="panel">
     <h1>Grip Customizer</h1>
-    <p class="sub">Upload one or more images or add text layers, then drag to move, use the corner handles to resize, and the top handle (or shift + scroll, or the [ ] keys) to rotate. Drag the edge bubbles on an image or shape to stretch it in that direction. Layers only show through the colored area of the shape. Reorder layers by dragging them in the list below.</p>
+    <p class="sub">Upload one or more images or add text layers, then drag to move, use the corner handles to resize, and the top handle (or shift + scroll, or the [ ] keys) to rotate. Drag the edge bubbles on an image or shape to stretch it in that direction. Layers only show through the colored area of the shape. Reorder layers in the Layers panel on the right.</p>
 
     <div class="field">
       <label for="imageInput">Add image layer</label>
@@ -411,28 +491,6 @@
         <strong>Drag &amp; drop images here</strong><br>or click to browse — multiple images each become their own layer
       </div>
       <input type="file" id="imageInput" accept="image/*" multiple style="display:none;">
-    </div>
-
-    <div class="field">
-      <label>Add text layer</label>
-      <button class="btn" id="addTextBtn" style="width:100%;">+ Add text</button>
-    </div>
-
-    <div class="field">
-      <label>Add shape layer</label>
-      <div class="shape-btn-grid">
-        <button class="btn" data-shape-kind="star">★ Star</button>
-        <button class="btn" data-shape-kind="rectangle">▭ Rectangle</button>
-        <button class="btn" data-shape-kind="square">■ Square</button>
-        <button class="btn" data-shape-kind="ellipse">⬭ Ellipse</button>
-        <button class="btn" data-shape-kind="circle">● Circle</button>
-        <button class="btn" data-shape-kind="line">— Line</button>
-      </div>
-    </div>
-
-    <div class="field">
-      <label>Layers</label>
-      <ul class="layer-list" id="layerList"></ul>
     </div>
 
     <div class="btn-row" style="margin-bottom:18px;">
@@ -466,13 +524,6 @@
       <div class="btn-row" style="margin-top:8px;">
         <button class="btn" id="rotLeftBtn" disabled>⟲ 15°</button>
         <button class="btn" id="rotRightBtn" disabled>⟳ 15°</button>
-      </div>
-    </div>
-
-    <div class="field">
-      <label for="opacityRange">Opacity <span id="opacityLabel" style="font-weight:400;color:var(--muted);">100%</span></label>
-      <div class="row">
-        <input type="range" id="opacityRange" min="0" max="100" value="100" step="1" disabled>
       </div>
     </div>
 
@@ -625,6 +676,39 @@
     </div>
     <p class="hint">Add a image, drag inside the outline to move it, drag a corner to resize, or drag one of the side bubbles to stretch it in that direction. Rotate by dragging the blue dot above it, holding shift while scrolling over the image, or pressing the [ and ] keys. Scroll to zoom the workspace, or hold the middle mouse button to pan it.</p>
   </main>
+
+  <aside class="panel panel-right">
+    <h1>Layers</h1>
+    <p class="sub">Reorder layers by dragging them in the list below. Click a layer to select it.</p>
+
+    <div class="field">
+      <label for="opacityRange">Opacity <span id="opacityLabel" style="font-weight:400;color:var(--muted);">100%</span></label>
+      <div class="row">
+        <input type="range" id="opacityRange" min="0" max="100" value="100" step="1" disabled>
+      </div>
+    </div>
+
+    <div class="field">
+      <ul class="layer-list" id="layerList"></ul>
+    </div>
+
+    <div class="field">
+      <label>Add text layer</label>
+      <button class="btn" id="addTextBtn" style="width:100%;">+ Add text</button>
+    </div>
+
+    <div class="field">
+      <label>Add shape layer</label>
+      <div class="shape-btn-grid">
+        <button class="btn" data-shape-kind="star">★ Star</button>
+        <button class="btn" data-shape-kind="rectangle">▭ Rectangle</button>
+        <button class="btn" data-shape-kind="square">■ Square</button>
+        <button class="btn" data-shape-kind="ellipse">⬭ Ellipse</button>
+        <button class="btn" data-shape-kind="circle">● Circle</button>
+        <button class="btn" data-shape-kind="line">— Line</button>
+      </div>
+    </div>
+  </aside>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
@@ -770,6 +854,7 @@
   const rotRightBtn = document.getElementById("rotRightBtn");
   const guideCheckbox = document.getElementById("guideCheckbox");
   const downloadZipBtn = document.getElementById("downloadZipBtn");
+  const saveZipMenuBtn = document.getElementById("saveZipMenuBtn");
   const addTextBtn = document.getElementById("addTextBtn");
   const textFieldsGroup = document.getElementById("textFieldsGroup");
   const textContentInput = document.getElementById("textContentInput");
@@ -2055,6 +2140,7 @@
     rotRightBtn.disabled = !hasSelection;
     opacityRange.disabled = !hasSelection;
     downloadZipBtn.disabled = !hasLayers;
+    saveZipMenuBtn.disabled = !hasLayers;
   }
 
   // ---- layer list UI ----
@@ -2353,10 +2439,34 @@
     dropzone.classList.remove("dragover");
     addImageFiles(e.dataTransfer && e.dataTransfer.files);
   });
+  // ---- drop images directly on the artboard to add them as layers ----
+  ["dragenter","dragover"].forEach((evt) => {
+    stageContainer.addEventListener(evt, (e) => {
+      if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes("Files")) return;
+      e.preventDefault();
+      e.stopPropagation();
+      stageContainer.classList.add("dragover");
+    });
+  });
+  ["dragleave","dragend"].forEach((evt) => {
+    stageContainer.addEventListener(evt, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      stageContainer.classList.remove("dragover");
+    });
+  });
+  stageContainer.addEventListener("drop", (e) => {
+    if (!e.dataTransfer || !Array.from(e.dataTransfer.types || []).includes("Files")) return;
+    e.preventDefault();
+    e.stopPropagation();
+    stageContainer.classList.remove("dragover");
+    addImageFiles(e.dataTransfer.files);
+  });
+
   // prevent the browser from navigating away if a file is dropped outside a dropzone
   ["dragover","drop"].forEach((evt) => {
     window.addEventListener(evt, (e) => {
-      const inDropzone = dropzone.contains(e.target) || projectZipDropzone.contains(e.target);
+      const inDropzone = dropzone.contains(e.target) || projectZipDropzone.contains(e.target) || stageContainer.contains(e.target);
       if (!inDropzone) e.preventDefault();
     });
   });
@@ -3146,6 +3256,7 @@
     }
     downloadZipBtn.disabled = true;
     downloadZipBtn.textContent = "Preparing…";
+    saveZipMenuBtn.disabled = true;
 
     // make sure every Google Font actually used by a text layer is embedded as a data URI
     // before rasterizing — otherwise the isolated export context can't fetch it and the
@@ -3232,9 +3343,11 @@
   function resetDownloadZipBtn(){
     downloadZipBtn.disabled = layers.length === 0;
     downloadZipBtn.textContent = "Download ZIP";
+    saveZipMenuBtn.disabled = layers.length === 0;
   }
 
   downloadZipBtn.addEventListener("click", exportZip);
+  saveZipMenuBtn.addEventListener("click", exportZip);
 
   // ---- import: re-create the editor from a previously exported project zip ----
   function mimeFromExt(path){
@@ -3399,6 +3512,33 @@
     const file = e.target.files && e.target.files[0];
     importProjectZip(file);
     projectZipInput.value = "";
+  });
+
+  // ---- menu bar: File menu ----
+  const fileMenu = document.getElementById("fileMenu");
+  const fileMenuBtn = document.getElementById("fileMenuBtn");
+  const loadProjectZipMenuItem = document.getElementById("loadProjectZipMenuItem");
+
+  function closeAllMenus(){
+    document.querySelectorAll(".menu.open").forEach((m) => m.classList.remove("open"));
+    fileMenuBtn.setAttribute("aria-expanded", "false");
+  }
+  fileMenuBtn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    const willOpen = !fileMenu.classList.contains("open");
+    closeAllMenus();
+    if (willOpen){
+      fileMenu.classList.add("open");
+      fileMenuBtn.setAttribute("aria-expanded", "true");
+    }
+  });
+  loadProjectZipMenuItem.addEventListener("click", () => {
+    closeAllMenus();
+    projectZipInput.click();
+  });
+  document.addEventListener("click", () => closeAllMenus());
+  document.addEventListener("keydown", (e) => {
+    if (e.key === "Escape") closeAllMenus();
   });
 
   projectZipDropzone.addEventListener("click", () => projectZipInput.click());
