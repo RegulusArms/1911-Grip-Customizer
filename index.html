@@ -463,6 +463,9 @@
     text-align:center;
     max-width:420px;
   }
+  .stage-hint{
+    max-width:100%;
+  }
   @media (max-width:760px){
     .app{flex-direction:column;height:auto;min-height:100vh;}
     .panel{width:auto;flex:none;border-right:none;border-left:none;border-bottom:1px solid var(--panel-border);overflow-y:visible;max-height:none;}
@@ -475,6 +478,7 @@
   <div class="menu" id="fileMenu">
     <button type="button" class="menu-btn" id="fileMenuBtn" aria-haspopup="true" aria-expanded="false">File</button>
     <div class="menu-dropdown" id="fileMenuDropdown" role="menu">
+      <div class="menu-item" id="addImageMenuItem" role="menuitem">Add Image…</div>
       <div class="menu-item" id="loadProjectZipMenuItem" role="menuitem">Load Project ZIP…</div>
     </div>
   </div>
@@ -483,15 +487,28 @@
 <div class="app">
   <aside class="panel">
     <h1>Grip Customizer</h1>
-    <p class="sub">Upload one or more images or add text layers, then drag to move, use the corner handles to resize, and the top handle (or shift + scroll, or the [ ] keys) to rotate. Drag the edge bubbles on an image or shape to stretch it in that direction. Layers only show through the colored area of the shape. Reorder layers in the Layers panel on the right.</p>
 
     <div class="field">
-      <label for="imageInput">Add image layer</label>
-      <div class="dropzone" id="dropzone" tabindex="0" role="button" aria-label="Drop images here or click to browse">
-        <strong>Drag &amp; drop images here</strong><br>or click to browse — multiple images each become their own layer
+      <label for="shapeSelect">Grip Panel Selector</label>
+      <select id="shapeSelect" style="width:100%;padding:7px 8px;font-size:13px;border-radius:8px;border:1px solid var(--panel-border);">
+        <option value="left">1911 Left</option>
+        <option value="right">1911 Right</option>
+        <option value="92fs-left">92FS Left</option>
+        <option value="92fs-right">92FS Right</option>
+      </select>
+      <div class="checkbox-row" style="margin-top:8px;">
+        <input type="checkbox" id="levelViewCheckbox">
+        <label for="levelViewCheckbox" style="margin:0;font-weight:400;">Level view (bottom parallel to ground)</label>
       </div>
-      <input type="file" id="imageInput" accept="image/*" multiple style="display:none;">
+      <div class="btn-row" style="margin-top:8px;">
+        <button class="btn" id="previewFadeBtn" type="button">Preview edge fade</button>
+      </div>
+      <p class="hint" id="previewFadeHint" style="display:none;margin:6px 0 0;text-align:left;">Simulated preview only (1911 grips) — shows how the ~2-3mm curved outer edges fade and shift color when printed. Not included in exports.</p>
     </div>
+
+    <hr class="sep">
+
+    <input type="file" id="imageInput" accept="image/*" multiple style="display:none;">
 
     <div class="btn-row" style="margin-bottom:18px;">
       <button class="btn" id="fitBtn" disabled>Fit to shape</button>
@@ -625,26 +642,6 @@
 
     <hr class="sep">
 
-    <div class="field">
-      <label for="shapeSelect">Grip Panel Selector</label>
-      <select id="shapeSelect" style="width:100%;padding:7px 8px;font-size:13px;border-radius:8px;border:1px solid var(--panel-border);">
-        <option value="left">1911 Left</option>
-        <option value="right">1911 Right</option>
-        <option value="92fs-left">92FS Left</option>
-        <option value="92fs-right">92FS Right</option>
-      </select>
-      <div class="checkbox-row" style="margin-top:8px;">
-        <input type="checkbox" id="levelViewCheckbox">
-        <label for="levelViewCheckbox" style="margin:0;font-weight:400;">Level view (bottom parallel to ground)</label>
-      </div>
-      <div class="btn-row" style="margin-top:8px;">
-        <button class="btn" id="previewFadeBtn" type="button">Preview edge fade</button>
-      </div>
-      <p class="hint" id="previewFadeHint" style="display:none;margin:6px 0 0;text-align:left;">Simulated preview only (1911 grips) — shows how the ~2-3mm curved outer edges fade and shift color when printed. Not included in exports.</p>
-    </div>
-
-    <hr class="sep">
-
     <button class="btn btn-primary" id="downloadZipBtn" disabled title="Downloads a zip containing the JPG mockup, the full quality PNG layers, a PNG of each individual layer, a project.xml with every layer's position/size/stacking data, and your original uploaded images — this zip can be re-loaded with &quot;Load project ZIP&quot; below">Download ZIP</button>
     <p class="download-note">Download the zip for each side of the grips (left and right), then email them to ross@regulusarms.com with your GunBroker order number or square order number as the subject line.</p>
 
@@ -674,7 +671,7 @@
         <div class="handle rotate" id="handle-rotate" title="Rotate"></div>
       </div>
     </div>
-    <p class="hint">Add a image, drag inside the outline to move it, drag a corner to resize, or drag one of the side bubbles to stretch it in that direction. Rotate by dragging the blue dot above it, holding shift while scrolling over the image, or pressing the [ and ] keys. Scroll to zoom the workspace, or hold the middle mouse button to pan it.</p>
+    <p class="hint stage-hint">Drag &amp; drop an image onto the artboard to add it as a layer, then drag inside the outline to move it, drag a corner to resize, or drag one of the side bubbles to stretch it in that direction. Rotate by dragging the blue dot above it, holding shift while scrolling over the image, or pressing the [ and ] keys. Scroll to zoom the workspace, or hold the middle mouse button to pan it.</p>
   </main>
 
   <aside class="panel panel-right">
@@ -831,7 +828,6 @@
   const stageContainer = document.getElementById("stageContainer");
   const handleLayer = document.getElementById("handleLayer");
   const imageInput = document.getElementById("imageInput");
-  const dropzone = document.getElementById("dropzone");
   const projectZipInput = document.getElementById("projectZipInput");
   const projectZipDropzone = document.getElementById("projectZipDropzone");
   const layerListEl = document.getElementById("layerList");
@@ -2412,33 +2408,6 @@
     imageInput.value = "";
   });
 
-  dropzone.addEventListener("click", () => imageInput.click());
-  dropzone.addEventListener("keydown", (e) => {
-    if (e.key === "Enter" || e.key === " "){
-      e.preventDefault();
-      imageInput.click();
-    }
-  });
-  ["dragenter","dragover"].forEach((evt) => {
-    dropzone.addEventListener(evt, (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      dropzone.classList.add("dragover");
-    });
-  });
-  ["dragleave","dragend"].forEach((evt) => {
-    dropzone.addEventListener(evt, (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      dropzone.classList.remove("dragover");
-    });
-  });
-  dropzone.addEventListener("drop", (e) => {
-    e.preventDefault();
-    e.stopPropagation();
-    dropzone.classList.remove("dragover");
-    addImageFiles(e.dataTransfer && e.dataTransfer.files);
-  });
   // ---- drop images directly on the artboard to add them as layers ----
   ["dragenter","dragover"].forEach((evt) => {
     stageContainer.addEventListener(evt, (e) => {
@@ -2466,7 +2435,7 @@
   // prevent the browser from navigating away if a file is dropped outside a dropzone
   ["dragover","drop"].forEach((evt) => {
     window.addEventListener(evt, (e) => {
-      const inDropzone = dropzone.contains(e.target) || projectZipDropzone.contains(e.target) || stageContainer.contains(e.target);
+      const inDropzone = projectZipDropzone.contains(e.target) || stageContainer.contains(e.target);
       if (!inDropzone) e.preventDefault();
     });
   });
@@ -3517,6 +3486,7 @@
   // ---- menu bar: File menu ----
   const fileMenu = document.getElementById("fileMenu");
   const fileMenuBtn = document.getElementById("fileMenuBtn");
+  const addImageMenuItem = document.getElementById("addImageMenuItem");
   const loadProjectZipMenuItem = document.getElementById("loadProjectZipMenuItem");
 
   function closeAllMenus(){
@@ -3531,6 +3501,10 @@
       fileMenu.classList.add("open");
       fileMenuBtn.setAttribute("aria-expanded", "true");
     }
+  });
+  addImageMenuItem.addEventListener("click", () => {
+    closeAllMenus();
+    imageInput.click();
   });
   loadProjectZipMenuItem.addEventListener("click", () => {
     closeAllMenus();
