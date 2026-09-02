@@ -3229,7 +3229,7 @@
     const exportScale = Math.max(1, Math.min(8, Math.round(2400 / longSide)));
     const canvasW = Math.max(1, Math.round(bg.w * exportScale));
     const canvasH = Math.max(1, Math.round(bg.h * exportScale));
-    rasterizeSvgToBlob(outSvg, canvasW, canvasH, { background:"#ffffff", mime:"image/jpeg", quality:0.75 }, cb);
+    rasterizeSvgToBlob(outSvg, canvasW, canvasH, { background:"#808080", mime:"image/jpeg", quality:0.75 }, cb);
   }
 
   // ---- export: full, unclipped layer stack as PNG, extended to cover every layer ----
