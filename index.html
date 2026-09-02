@@ -519,6 +519,10 @@
       <div class="btn-row" style="margin-bottom:8px;">
         <button class="btn" id="resetImageSizeBtn" style="width:100%;">Reset size &amp; aspect ratio</button>
       </div>
+      <div class="btn-row" style="margin-bottom:8px;">
+        <button class="btn" id="flipHorizontalBtn" type="button">Flip horizontal</button>
+        <button class="btn" id="flipVerticalBtn" type="button">Flip vertical</button>
+      </div>
       <div class="btn-row">
         <button class="btn" id="removeBgBtn">Remove background</button>
         <button class="btn" id="restoreOriginalBtn" style="display:none;">Restore original</button>
@@ -853,6 +857,8 @@
   const removeImgBtn = document.getElementById("removeImgBtn");
   const imageFieldsGroup = document.getElementById("imageFieldsGroup");
   const resetImageSizeBtn = document.getElementById("resetImageSizeBtn");
+  const flipHorizontalBtn = document.getElementById("flipHorizontalBtn");
+  const flipVerticalBtn = document.getElementById("flipVerticalBtn");
   const removeBgBtn = document.getElementById("removeBgBtn");
   const restoreOriginalBtn = document.getElementById("restoreOriginalBtn");
   const removeBgStatus = document.getElementById("removeBgStatus");
@@ -2348,6 +2354,8 @@
     const isImage = !!selected && selected.type === "image";
     imageFieldsGroup.style.display = isImage ? "" : "none";
     if (!isImage) return;
+    flipHorizontalBtn.classList.toggle("active", !!selected.flipX);
+    flipVerticalBtn.classList.toggle("active", !!selected.flipY);
     restoreOriginalBtn.style.display = selected.originalDataURL ? "" : "none";
     removeBgBtn.textContent = "Remove background";
     removeBgBtn.disabled = false;
@@ -2679,6 +2687,22 @@
     layer.naturalW = layer.origNaturalW;
     layer.naturalH = layer.origNaturalH;
     buildStage();
+  });
+
+  flipHorizontalBtn.addEventListener("click", () => {
+    const layer = getSelectedLayer();
+    if (!layer || layer.type !== "image") return;
+    layer.flipX = !layer.flipX;
+    buildStage();
+    syncImageControls();
+  });
+
+  flipVerticalBtn.addEventListener("click", () => {
+    const layer = getSelectedLayer();
+    if (!layer || layer.type !== "image") return;
+    layer.flipY = !layer.flipY;
+    buildStage();
+    syncImageControls();
   });
 
   removeBgBtn.addEventListener("click", () => {
@@ -3034,6 +3058,9 @@
       el.setAttribute("width", layer.naturalW);
       el.setAttribute("height", layer.naturalH);
       el.setAttribute("preserveAspectRatio", "none");
+      if (layer.flipX || layer.flipY){
+        el.setAttribute("transform", `scale(${layer.flipX ? -1 : 1} ${layer.flipY ? -1 : 1})`);
+      }
     }
     const opacity = layer.opacity == null ? 100 : layer.opacity;
     if (opacity < 100) el.setAttribute("opacity", String(Math.max(0, Math.min(100, opacity)) / 100));
@@ -3282,6 +3309,8 @@
 
       if (layer.type === "image"){
         el.setAttribute("name", layer.name || "");
+        if (layer.flipX) el.setAttribute("flipX", "true");
+        if (layer.flipY) el.setAttribute("flipY", "true");
         if (layer.origNaturalW != null){
           el.setAttribute("origNaturalWidth", String(layer.origNaturalW));
           el.setAttribute("origNaturalHeight", String(layer.origNaturalH));
@@ -3461,6 +3490,8 @@
           name: el.getAttribute("name") || "image.png",
           naturalW, naturalH,
           origNaturalW: origW, origNaturalH: origH,
+          flipX: el.getAttribute("flipX") === "true",
+          flipY: el.getAttribute("flipY") === "true",
           dataURL,
           opacity,
           xform,
