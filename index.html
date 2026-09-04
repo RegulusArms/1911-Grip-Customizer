@@ -4,6 +4,17 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>1911 Grip Customizer</title>
+<script>
+  // set the theme before first paint so there's no flash of the wrong palette
+  (function(){
+    var theme = "dark";
+    try{
+      var saved = localStorage.getItem("gripCustomizerTheme");
+      if (saved === "light" || saved === "dark") theme = saved;
+    }catch(e){ /* ignore */ }
+    document.documentElement.setAttribute("data-theme", theme);
+  })();
+</script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Roboto&family=Montserrat&family=Oswald&family=Bebas+Neue&family=Anton&family=Playfair+Display&family=Merriweather&family=Cinzel&family=Roboto+Mono&family=Dancing+Script&family=Pacifico&display=swap" rel="stylesheet">
@@ -15,6 +26,36 @@
     --text:#1f2430;
     --muted:#6b7280;
     --bg:#f4f5f7;
+    --surface:#ffffff;
+    --hover-bg:#f2f3f5;
+    --accent-tint:#eaf1fe;
+    --dropzone-hover-bg:#f7f9fc;
+    --dropzone-hover-border:#c7cbd4;
+    --dropdown-shadow:rgba(0,0,0,.14);
+    --stage-shadow-1:rgba(0,0,0,.12);
+    --stage-shadow-2:rgba(0,0,0,.08);
+    --danger:#c0392b;
+    --stage-bg:#ffffff;
+    --stage-checker:#e6e6ea;
+  }
+  html[data-theme="dark"]{
+    --panel-bg:#1c1f26;
+    --panel-border:#33363f;
+    --accent:#5b9dff;
+    --text:#e7e9ee;
+    --muted:#9aa0ac;
+    --bg:#111318;
+    --surface:#20232b;
+    --hover-bg:#2a2d36;
+    --accent-tint:#1d2c46;
+    --dropzone-hover-bg:#262a33;
+    --dropzone-hover-border:#454a56;
+    --dropdown-shadow:rgba(0,0,0,.5);
+    --stage-shadow-1:rgba(0,0,0,.4);
+    --stage-shadow-2:rgba(0,0,0,.3);
+    --danger:#e0685a;
+    --stage-bg:#2b2e35;
+    --stage-checker:#363a43;
   }
   *{box-sizing:border-box;}
   html,body{
@@ -22,6 +63,10 @@
     height:100%;
     background:var(--bg);
     font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--text);
+  }
+  select, textarea, input[type="number"], input[type="text"]{
+    background:var(--surface);
     color:var(--text);
   }
   body{
@@ -51,14 +96,30 @@
     border-radius:6px;
     cursor:pointer;
     background:transparent;
+    color:var(--text);
+    font:inherit;
   }
   .menu-btn:hover, .menu.open .menu-btn{
-    background:#f2f3f5;
+    background:var(--hover-bg);
   }
   .menu-btn:disabled{
     opacity:.4;
     cursor:not-allowed;
     background:transparent;
+  }
+  .theme-toggle-btn{
+    margin-left:auto;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:30px;
+    height:30px;
+    padding:0;
+    color:var(--muted);
+  }
+  .theme-toggle-btn svg{
+    width:17px;
+    height:17px;
   }
   .menu-dropdown{
     display:none;
@@ -67,10 +128,10 @@
     left:0;
     margin-top:2px;
     min-width:200px;
-    background:#fff;
+    background:var(--surface);
     border:1px solid var(--panel-border);
     border-radius:8px;
-    box-shadow:0 4px 16px rgba(0,0,0,.14);
+    box-shadow:0 4px 16px var(--dropdown-shadow);
     padding:6px;
   }
   .menu.open .menu-dropdown{
@@ -84,7 +145,7 @@
     white-space:nowrap;
   }
   .menu-item:hover{
-    background:#f2f3f5;
+    background:var(--hover-bg);
   }
   .app{
     display:flex;
@@ -155,11 +216,11 @@
     transition:background .12s ease, border-color .12s ease;
   }
   .dropzone:hover{
-    background:#f7f9fc;
-    border-color:#c7cbd4;
+    background:var(--dropzone-hover-bg);
+    border-color:var(--dropzone-hover-border);
   }
   .dropzone.dragover{
-    background:#eaf1fe;
+    background:var(--accent-tint);
     border-color:var(--accent);
     color:var(--text);
   }
@@ -172,7 +233,7 @@
     justify-content:center;
     gap:6px;
     border:1px solid var(--panel-border);
-    background:#fff;
+    background:var(--surface);
     color:var(--text);
     padding:8px 12px;
     font-size:13px;
@@ -180,7 +241,7 @@
     cursor:pointer;
     transition:background .12s ease;
   }
-  .btn:hover{background:#f2f3f5;}
+  .btn:hover{background:var(--hover-bg);}
   .btn:disabled{opacity:.45;cursor:not-allowed;}
   .btn-row{
     display:flex;
@@ -331,14 +392,14 @@
     gap:7px;
     padding:7px 8px;
     font-size:12.5px;
-    background:#fff;
+    background:var(--surface);
     border-bottom:1px solid var(--panel-border);
     cursor:pointer;
     user-select:none;
   }
   .layer-item:last-child{border-bottom:none;}
   .layer-item.active{
-    background:#eaf1fe;
+    background:var(--accent-tint);
     outline:1px solid var(--accent);
     outline-offset:-1px;
   }
@@ -367,7 +428,7 @@
     padding:2px 5px;
     border-radius:4px;
   }
-  .layer-remove:hover{background:#f2f3f5;color:#c0392b;}
+  .layer-remove:hover{background:var(--hover-bg);color:var(--danger);}
   .layer-empty{
     padding:10px 8px;
     font-size:12px;
@@ -396,15 +457,15 @@
     width:100%;
     border-radius:10px;
     overflow:hidden;
-    box-shadow:0 1px 3px rgba(0,0,0,.12), 0 8px 24px rgba(0,0,0,.08);
+    box-shadow:0 1px 3px var(--stage-shadow-1), 0 8px 24px var(--stage-shadow-2);
     background-image:
-      linear-gradient(45deg, #e6e6ea 25%, transparent 25%),
-      linear-gradient(-45deg, #e6e6ea 25%, transparent 25%),
-      linear-gradient(45deg, transparent 75%, #e6e6ea 75%),
-      linear-gradient(-45deg, transparent 75%, #e6e6ea 75%);
+      linear-gradient(45deg, var(--stage-checker) 25%, transparent 25%),
+      linear-gradient(-45deg, var(--stage-checker) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, var(--stage-checker) 75%),
+      linear-gradient(-45deg, transparent 75%, var(--stage-checker) 75%);
     background-size:18px 18px;
     background-position:0 0, 0 9px, 9px -9px, -9px 0px;
-    background-color:#fff;
+    background-color:var(--stage-bg);
     touch-action:none;
   }
   .stage-container.dragover{
@@ -483,6 +544,17 @@
     </div>
   </div>
   <button type="button" class="menu-btn" id="saveZipMenuBtn" disabled>Save</button>
+  <button type="button" class="menu-btn theme-toggle-btn" id="themeToggleBtn" title="Switch to light theme" aria-label="Switch to light theme">
+    <svg id="themeIconMoon" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20.5,14.2A8.5,8.5,0,1,1,9.8,3.5,7,7,0,0,0,20.5,14.2Z"></path>
+    </svg>
+    <svg id="themeIconSun" viewBox="0 0 24 24" aria-hidden="true" style="display:none;">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="4.5"></circle>
+        <path d="M12,2.5v2.5M12,19v2.5M4.6,4.6l1.8,1.8M17.6,17.6l1.8,1.8M2.5,12h2.5M19,12h2.5M4.6,19.4l1.8-1.8M17.6,6.4l1.8-1.8"></path>
+      </g>
+    </svg>
+  </button>
 </div>
 <div class="app">
   <aside class="panel">
@@ -871,6 +943,9 @@
   const guideCheckbox = document.getElementById("guideCheckbox");
   const downloadZipBtn = document.getElementById("downloadZipBtn");
   const saveZipMenuBtn = document.getElementById("saveZipMenuBtn");
+  const themeToggleBtn = document.getElementById("themeToggleBtn");
+  const themeIconMoon = document.getElementById("themeIconMoon");
+  const themeIconSun = document.getElementById("themeIconSun");
   const addTextBtn = document.getElementById("addTextBtn");
   const textFieldsGroup = document.getElementById("textFieldsGroup");
   const textContentInput = document.getElementById("textContentInput");
@@ -3452,6 +3527,24 @@
 
   downloadZipBtn.addEventListener("click", exportZip);
   saveZipMenuBtn.addEventListener("click", exportZip);
+
+  // ---- light/dark theme toggle (defaults to dark; see the inline script in <head> ----
+  // ---- that applies the saved/default theme before first paint to avoid a flash)   ----
+  function applyTheme(theme){
+    document.documentElement.setAttribute("data-theme", theme);
+    const isDark = theme === "dark";
+    themeIconMoon.style.display = isDark ? "" : "none";
+    themeIconSun.style.display = isDark ? "none" : "";
+    const label = isDark ? "Switch to light theme" : "Switch to dark theme";
+    themeToggleBtn.title = label;
+    themeToggleBtn.setAttribute("aria-label", label);
+  }
+  applyTheme(document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark");
+  themeToggleBtn.addEventListener("click", () => {
+    const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
+    applyTheme(next);
+    try{ localStorage.setItem("gripCustomizerTheme", next); }catch(e){ /* ignore */ }
+  });
 
   // ---- import: re-create the editor from a previously exported project zip ----
   function mimeFromExt(path){
