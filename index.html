@@ -435,6 +435,54 @@
     color:var(--muted);
     text-align:center;
   }
+  .history-list{
+    list-style:none;
+    margin:0;
+    padding:0;
+    border:1px solid var(--panel-border);
+    border-radius:8px;
+    overflow-y:auto;
+    max-height:260px;
+  }
+  .history-item{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:6px 8px;
+    font-size:12px;
+    background:var(--surface);
+    border-bottom:1px solid var(--panel-border);
+    cursor:pointer;
+  }
+  .history-item:last-child{border-bottom:none;}
+  .history-item:hover{background:var(--hover-bg);}
+  .history-item.current{
+    background:var(--accent-tint);
+    outline:1px solid var(--accent);
+    outline-offset:-1px;
+  }
+  .history-thumb{
+    flex:0 0 auto;
+    width:30px;
+    height:44px;
+    border-radius:4px;
+    background:var(--stage-bg);
+    border:1px solid var(--panel-border);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    overflow:hidden;
+  }
+  .history-thumb img{
+    max-width:100%;
+    max-height:100%;
+  }
+  .history-desc{
+    flex:1 1 auto;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
   .download-note{
     font-size:11.5px;
     line-height:1.5;
@@ -781,6 +829,11 @@
         <button class="btn" data-shape-kind="line">— Line</button>
       </div>
     </div>
+
+    <div class="field">
+      <label>History <span style="font-weight:400;color:var(--muted);">(Ctrl+Z to undo)</span></label>
+      <ul class="history-list" id="historyList"></ul>
+    </div>
   </aside>
 </div>
 
@@ -902,6 +955,17 @@
   let showGuide = true;
   let currentShapeLabel = "";
   let dragSrcLi = null;
+
+  // ---- history (undo/jump-to-state) ----
+  // a capped stack of full-state snapshots (not diffs) — simplest way to guarantee any
+  // entry can be restored exactly, at the cost of some memory; dataURL strings are shared
+  // by reference across snapshots (immutable), so only the small xform/color sub-objects
+  // are actually deep-cloned per snapshot. `historyIndex` is the currently-active entry;
+  // making a new change after jumping back drops everything past it (see pushHistoryEntry).
+  const HISTORY_MAX = 50;
+  let historyStack = [];       // [{ desc, thumbnail: dataURL|null, state:{shapeKey,levelView,layers,selectedLayerId} }]
+  let historyIndex = -1;
+  let historyBeforeSnapshot = null; // captured at the start of an in-progress drag/typing session
   let levelView = false;      // display-only: show the shape rotated so its bottom edge is level
   let previewFadeOn = false;  // display-only: simulate the curved-edge print fade on 1911 grips
   let colorSamplingActive = false;    // color dropper: hovering the stage previews a sampled color
@@ -975,6 +1039,7 @@
   const shapeStrokeWidthField = document.getElementById("shapeStrokeWidthField");
   const shapeStrokeWidthRange = document.getElementById("shapeStrokeWidthRange");
   const shapeStrokeWidthLabel = document.getElementById("shapeStrokeWidthLabel");
+  const historyListEl = document.getElementById("historyList");
 
   // ---- shared: which layer types use the color wheel / are colorable ----
   function isColorableLayer(layer){
@@ -984,6 +1049,225 @@
   // ---- layer helpers ----
   function getSelectedLayer(){
     return layers.find((l) => l.id === selectedLayerId) || null;
+  }
+
+  // ---- history: short human label for a layer, used in history descriptions ----
+  function layerLabel(layer){
+    if (!layer) return "layer";
+    if (layer.type === "text") return `"${(layer.text || "Text").split("\n")[0].slice(0, 20) || "Text"}"`;
+    if (layer.type === "shape") return layer.shapeKind.charAt(0).toUpperCase() + layer.shapeKind.slice(1);
+    return layer.name || "Image";
+  }
+
+  // shallow-clones a layer, deep-cloning only its small mutable sub-objects (xform/color)
+  // so history snapshots can't be mutated by later live edits — dataURL/text strings are
+  // immutable so sharing the reference across snapshots is safe and avoids duplicating
+  // potentially-large image data in memory for every history entry.
+  function cloneLayerForHistory(layer){
+    const copy = Object.assign({}, layer);
+    copy.xform = Object.assign({}, layer.xform);
+    if (layer.color) copy.color = Object.assign({}, layer.color);
+    return copy;
+  }
+
+  function serializeState(){
+    return {
+      shapeKey: shapeSelect.value,
+      levelView: !!levelView,
+      selectedLayerId,
+      layers: layers.map(cloneLayerForHistory)
+    };
+  }
+
+  function statesEqual(a, b){
+    return JSON.stringify(a) === JSON.stringify(b);
+  }
+
+  // best-effort human description of what changed between two full-state snapshots
+  function describeStateChange(before, after){
+    if (before.shapeKey !== after.shapeKey){
+      const shape = BUILTIN_SHAPES[after.shapeKey];
+      return `Changed grip panel to ${shape ? shape.label : after.shapeKey}`;
+    }
+    const bIds = before.layers.map((l) => l.id);
+    const aIds = after.layers.map((l) => l.id);
+    if (aIds.length > bIds.length){
+      const added = after.layers.find((l) => !bIds.includes(l.id));
+      return `Added layer ${layerLabel(added)}`;
+    }
+    if (aIds.length < bIds.length){
+      const removedId = bIds.find((id) => !aIds.includes(id));
+      const removed = before.layers.find((l) => l.id === removedId);
+      return `Removed layer ${layerLabel(removed)}`;
+    }
+    if (aIds.join(",") !== bIds.join(",")){
+      if (aIds.length === 2) return `Rearranged layers ${layerLabel(after.layers[0])}, ${layerLabel(after.layers[1])}`;
+      return "Rearranged layers";
+    }
+    for (let i = 0; i < after.layers.length; i++){
+      const a = after.layers[i];
+      const b = before.layers.find((l) => l.id === a.id);
+      if (!b) continue;
+      if (a.xform.cx !== b.xform.cx || a.xform.cy !== b.xform.cy) return `Moved layer ${layerLabel(a)}`;
+      if (a.xform.scale !== b.xform.scale || a.naturalW !== b.naturalW || a.naturalH !== b.naturalH) return `Resized layer ${layerLabel(a)}`;
+      if (a.xform.rot !== b.xform.rot) return `Rotated layer ${layerLabel(a)}`;
+      if (a.opacity !== b.opacity) return `Changed opacity of layer ${layerLabel(a)}`;
+      if (JSON.stringify(a.color) !== JSON.stringify(b.color)) return `Changed color of layer ${layerLabel(a)}`;
+      if (a.type === "text" && a.text !== b.text) return `Edited text of layer ${layerLabel(a)}`;
+      if (a.type === "text" && a.fontFamily !== b.fontFamily) return `Changed font of layer ${layerLabel(a)}`;
+      if (a.type === "shape" && (a.shapeKind !== b.shapeKind || a.filled !== b.filled || a.strokeWidth !== b.strokeWidth)) return `Changed style of layer ${layerLabel(a)}`;
+      if (a.type === "image" && (a.dataURL !== b.dataURL || a.flipX !== b.flipX || a.flipY !== b.flipY)) return `Edited image ${layerLabel(a)}`;
+    }
+    return "Edited artboard";
+  }
+
+  // renders a small offscreen raster of the current #stage so history entries can show a
+  // preview without re-embedding full-resolution layer images per entry (see below).
+  function rasterizeThumbnail(cb){
+    try{
+      const clone = stage.cloneNode(true);
+      const guide = clone.querySelector("#guideGroup");
+      if (guide) guide.remove();
+      // strip embedded @font-face rules (can be 1MB+ once every Google Font is warmed) —
+      // exact font rendering is imperceptible at thumbnail scale, and large data URIs here
+      // were observed to silently fail to rasterize onto the canvas (blank output) despite
+      // the <img> reporting a successful load with correct intrinsic dimensions.
+      clone.querySelectorAll("style").forEach((s) => s.remove());
+      clone.removeAttribute("id");
+      // the live stage carries an inline CSS transform for the workspace pan/zoom view —
+      // meaningless (and badly misplacing) once rendered standalone at thumbnail size
+      clone.removeAttribute("style");
+      const w = (bg && bg.w) || 200, h = (bg && bg.h) || 300;
+      const THUMB_W = 96;
+      const THUMB_H = Math.max(1, Math.round(THUMB_W * h / w));
+      clone.setAttribute("width", String(THUMB_W));
+      clone.setAttribute("height", String(THUMB_H));
+      const xml = new XMLSerializer().serializeToString(clone);
+      const svg64 = btoa(unescape(encodeURIComponent(xml)));
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement("canvas");
+        canvas.width = THUMB_W; canvas.height = THUMB_H;
+        const ctx = canvas.getContext("2d");
+        ctx.drawImage(img, 0, 0, THUMB_W, THUMB_H);
+        try{ cb(canvas.toDataURL("image/png")); }catch(e){ cb(null); }
+      };
+      img.onerror = () => cb(null);
+      img.src = "data:image/svg+xml;base64," + svg64;
+    }catch(e){ cb(null); }
+  }
+
+  function pushHistoryEntry(desc, afterState){
+    historyStack = historyStack.slice(0, historyIndex + 1);
+    const entry = { desc, thumbnail: null, state: afterState };
+    historyStack.push(entry);
+    if (historyStack.length > HISTORY_MAX) historyStack.shift();
+    historyIndex = historyStack.length - 1;
+    rasterizeThumbnail((dataUrl) => {
+      entry.thumbnail = dataUrl;
+      renderHistoryPanel();
+    });
+    renderHistoryPanel();
+  }
+
+  // records a discrete, one-shot change (button click, select/checkbox change) — always
+  // pushes since these handlers only run when a real change actually happened.
+  function recordHistory(desc){
+    pushHistoryEntry(desc, serializeState());
+  }
+
+  // for continuous interactions (drag, slider, typing): call beginHistoryChange() once at
+  // the start of the interaction and commitHistoryChange() once it ends, so intermediate
+  // steps don't each get their own entry. Idempotent — a nested/duplicate begin is a no-op,
+  // so overlapping interactions still commit against the correct "before" state.
+  function beginHistoryChange(){
+    if (historyBeforeSnapshot) return;
+    historyBeforeSnapshot = serializeState();
+  }
+  function commitHistoryChange(describeFn){
+    if (!historyBeforeSnapshot) return;
+    const before = historyBeforeSnapshot;
+    historyBeforeSnapshot = null;
+    const after = serializeState();
+    if (statesEqual(before, after)) return;
+    const desc = typeof describeFn === "function" ? describeFn() : (describeFn || describeStateChange(before, after));
+    pushHistoryEntry(desc, after);
+  }
+
+  function restoreState(state){
+    const needsBgReload = shapeSelect.value !== state.shapeKey && BUILTIN_SHAPES[state.shapeKey];
+    layers = state.layers.map(cloneLayerForHistory);
+    selectedLayerId = state.selectedLayerId;
+    levelView = !!state.levelView;
+    levelViewCheckbox.checked = levelView;
+    if (needsBgReload){
+      const shape = BUILTIN_SHAPES[state.shapeKey];
+      shapeSelect.value = state.shapeKey;
+      currentShapeLabel = shape.label;
+      updatePreviewFadeUI();
+      parseAndLoadBackground(shape.svg); // this calls buildStage() itself
+    } else {
+      buildStage();
+    }
+    renderLayerList();
+    syncZoomSlider();
+    syncRotationSlider();
+    updateControlsEnabled();
+    syncTextControls();
+  }
+
+  function goToHistory(index){
+    if (index < 0 || index >= historyStack.length || index === historyIndex) return;
+    restoreState(historyStack[index].state);
+    historyIndex = index;
+    renderHistoryPanel();
+  }
+
+  function undoOneStep(){
+    if (historyIndex > 0) goToHistory(historyIndex - 1);
+  }
+
+  // resets history to a single starting entry — used on first load and after importing a
+  // project zip that doesn't carry its own <history> section (older exports).
+  function resetHistoryForFreshLoad(desc){
+    historyStack = [];
+    historyIndex = -1;
+    pushHistoryEntry(desc, serializeState());
+  }
+
+  function renderHistoryPanel(){
+    if (!historyListEl) return;
+    historyListEl.innerHTML = "";
+    if (!historyStack.length){
+      const empty = document.createElement("div");
+      empty.className = "layer-empty";
+      empty.textContent = "No history yet.";
+      historyListEl.appendChild(empty);
+      return;
+    }
+    historyStack.forEach((entry, i) => {
+      const li = document.createElement("li");
+      li.className = "history-item" + (i === historyIndex ? " current" : "");
+
+      const thumbWrap = document.createElement("span");
+      thumbWrap.className = "history-thumb";
+      if (entry.thumbnail){
+        const img = document.createElement("img");
+        img.src = entry.thumbnail;
+        img.alt = "";
+        thumbWrap.appendChild(img);
+      }
+      li.appendChild(thumbWrap);
+
+      const desc = document.createElement("span");
+      desc.className = "history-desc";
+      desc.textContent = entry.desc;
+      li.appendChild(desc);
+
+      li.addEventListener("click", () => goToHistory(i));
+      historyListEl.appendChild(li);
+      if (i === historyIndex) li.scrollIntoView({ block: "nearest" });
+    });
   }
 
   function transformString(xform){
@@ -1069,11 +1353,12 @@
   }
 
   [cmykCInput, cmykMInput, cmykYInput, cmykKInput].forEach((input) => {
-    input.addEventListener("input", applyCmykFromInputs);
+    input.addEventListener("input", () => { beginHistoryChange(); applyCmykFromInputs(); });
     input.addEventListener("change", () => {
       const clamp = (v) => Math.max(0, Math.min(100, isNaN(v) ? 0 : v));
       input.value = clamp(parseFloat(input.value));
       applyCmykFromInputs();
+      commitHistoryChange(() => `Changed color of layer ${layerLabel(getSelectedLayer())}`);
     });
   });
 
@@ -2104,6 +2389,7 @@
       if (!hit) return;
       e.preventDefault();
       if (hit.id !== selectedLayerId) selectLayer(hit.id);
+      beginHistoryChange();
       const start = stagePt;
       const startCx = hit.xform.cx, startCy = hit.xform.cy;
       function move(ev){
@@ -2115,6 +2401,7 @@
       function up(){
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", up);
+        commitHistoryChange(() => `Moved layer ${layerLabel(hit)}`);
       }
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", up);
@@ -2131,6 +2418,7 @@
       if (!selected) return;
       e.preventDefault();
       e.stopPropagation();
+      beginHistoryChange();
       const start = stagePointFromEvent(e);
       const dx0 = start.x - selected.xform.cx, dy0 = start.y - selected.xform.cy;
       const startDist = Math.hypot(dx0, dy0) || 0.0001;
@@ -2147,6 +2435,7 @@
       function up(){
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", up);
+        commitHistoryChange(() => `Resized layer ${layerLabel(selected)}`);
       }
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", up);
@@ -2168,6 +2457,7 @@
       if (!selected || (selected.type !== "shape" && selected.type !== "image")) return;
       e.preventDefault();
       e.stopPropagation();
+      beginHistoryChange();
       const start = stagePointFromEvent(e);
       const rad = selected.xform.rot * Math.PI / 180;
       const axis = dim === "w" ? { x: Math.cos(rad), y: Math.sin(rad) } : { x: -Math.sin(rad), y: Math.cos(rad) };
@@ -2189,6 +2479,7 @@
       function up(){
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", up);
+        commitHistoryChange(() => `Resized layer ${layerLabel(selected)}`);
       }
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", up);
@@ -2208,6 +2499,7 @@
       if (!selected) return;
       e.preventDefault();
       e.stopPropagation();
+      beginHistoryChange();
       const start = stagePointFromEvent(e);
       const startAngle = Math.atan2(start.y - selected.xform.cy, start.x - selected.xform.cx) * 180/Math.PI;
       const startRot = selected.xform.rot;
@@ -2221,6 +2513,7 @@
       function up(){
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", up);
+        commitHistoryChange(() => `Rotated layer ${layerLabel(selected)}`);
       }
       window.addEventListener("pointermove", move);
       window.addEventListener("pointerup", up);
@@ -2316,6 +2609,7 @@
       li.addEventListener("click", () => selectLayer(layer.id));
 
       li.addEventListener("dragstart", (e) => {
+        beginHistoryChange();
         dragSrcLi = li;
         li.classList.add("dragging");
         e.dataTransfer.effectAllowed = "move";
@@ -2342,6 +2636,7 @@
           .map((id) => layers.find((l) => String(l.id) === id))
           .filter(Boolean);
         buildStage();
+        commitHistoryChange();
       });
 
       layerListEl.appendChild(li);
@@ -2360,6 +2655,8 @@
 
   function removeLayer(id){
     const removedIndex = layers.findIndex((l) => l.id === id);
+    if (removedIndex === -1) return;
+    const removedLabel = layerLabel(layers[removedIndex]);
     layers = layers.filter((l) => l.id !== id);
     if (selectedLayerId === id){
       const nextIndex = Math.min(removedIndex, layers.length - 1);
@@ -2371,6 +2668,7 @@
     syncRotationSlider();
     updateControlsEnabled();
     syncTextControls();
+    recordHistory(`Removed layer ${removedLabel}`);
   }
 
   // ---- per-layer-type controls: populate the panel from the selected layer, or hide it ----
@@ -2462,6 +2760,7 @@
     syncTextControls();
     textContentInput.focus();
     textContentInput.select();
+    recordHistory(`Added layer ${layerLabel(layer)}`);
   }
 
   function addShapeLayer(kind){
@@ -2490,6 +2789,7 @@
     syncRotationSlider();
     updateControlsEnabled();
     syncTextControls();
+    recordHistory(`Added layer ${layerLabel(layer)}`);
   }
 
   // ---- events: image upload (adds one layer per selected file) ----
@@ -2527,6 +2827,7 @@
     syncRotationSlider();
     updateControlsEnabled();
     syncTextControls();
+    recordHistory(`Added layer ${layerLabel(layer)}`);
   }
 
   // Some CMYK/YCCK-color JPEGs (common in print-ready art exported from
@@ -2762,6 +3063,7 @@
     layer.naturalW = layer.origNaturalW;
     layer.naturalH = layer.origNaturalH;
     buildStage();
+    recordHistory(`Resized layer ${layerLabel(layer)}`);
   });
 
   flipHorizontalBtn.addEventListener("click", () => {
@@ -2770,6 +3072,7 @@
     layer.flipX = !layer.flipX;
     buildStage();
     syncImageControls();
+    recordHistory(`Edited image ${layerLabel(layer)}`);
   });
 
   flipVerticalBtn.addEventListener("click", () => {
@@ -2778,6 +3081,7 @@
     layer.flipY = !layer.flipY;
     buildStage();
     syncImageControls();
+    recordHistory(`Edited image ${layerLabel(layer)}`);
   });
 
   removeBgBtn.addEventListener("click", () => {
@@ -2792,6 +3096,7 @@
       buildStage();
       syncImageControls();
       removeBgStatus.textContent = "Background removed.";
+      recordHistory(`Edited image ${layerLabel(layer)}`);
     }).catch((err) => {
       console.error(err);
       removeBgBtn.disabled = false;
@@ -2808,6 +3113,7 @@
     delete layer.originalDataURL;
     buildStage();
     syncImageControls();
+    recordHistory(`Edited image ${layerLabel(layer)}`);
   });
 
   // ---- events: text layers ----
@@ -2816,10 +3122,14 @@
   textContentInput.addEventListener("input", () => {
     const selected = getSelectedLayer();
     if (!selected || selected.type !== "text") return;
+    beginHistoryChange();
     selected.text = textContentInput.value;
     measureTextLayer(selected);
     buildStage();
     renderLayerList();
+  });
+  textContentInput.addEventListener("change", () => {
+    commitHistoryChange(() => `Edited text of layer ${layerLabel(getSelectedLayer())}`);
   });
 
   fontSelect.addEventListener("change", () => {
@@ -2833,6 +3143,7 @@
     selected.fontFamily = fontSelect.value;
     measureTextLayer(selected);
     buildStage();
+    recordHistory(`Changed font of layer ${layerLabel(selected)}`);
   });
 
   fontFileInput.addEventListener("change", (e) => {
@@ -2853,6 +3164,7 @@
           fontSelect.value = familyName;
           measureTextLayer(selected);
           buildStage();
+          recordHistory(`Changed font of layer ${layerLabel(selected)}`);
         }
       });
     };
@@ -2864,6 +3176,7 @@
     const selected = getSelectedLayer();
     if (!isColorableLayer(selected)) return;
     e.preventDefault();
+    beginHistoryChange();
     colorWheel.setPointerCapture(e.pointerId);
     const apply = (ev) => {
       const { hue, sat } = wheelPointFromEvent(ev);
@@ -2876,6 +3189,7 @@
       colorWheel.removeEventListener("pointermove", move);
       colorWheel.removeEventListener("pointerup", up);
       colorWheel.removeEventListener("pointercancel", up);
+      commitHistoryChange(() => `Changed color of layer ${layerLabel(selected)}`);
     }
     colorWheel.addEventListener("pointermove", move);
     colorWheel.addEventListener("pointerup", up);
@@ -2885,12 +3199,16 @@
   cmykK.addEventListener("input", () => {
     const selected = getSelectedLayer();
     if (!isColorableLayer(selected)) return;
+    beginHistoryChange();
     const k = parseFloat(cmykK.value);
     selected.color.k = k;
     selected.fillColor = cmykToHex(selected.color.c, selected.color.m, selected.color.y, k);
     cmykKVal.textContent = k + "%";
     updateColorReadout(selected);
     buildStage();
+  });
+  cmykK.addEventListener("change", () => {
+    commitHistoryChange(() => `Changed color of layer ${layerLabel(getSelectedLayer())}`);
   });
 
   // ---- events: color dropper ----
@@ -2926,13 +3244,27 @@
     }
   });
 
+  // ---- undo shortcut: Ctrl+Z (Cmd+Z on Mac) steps back one history entry ----
+  window.addEventListener("keydown", (e) => {
+    if (!(e.ctrlKey || e.metaKey) || e.altKey || e.key.toLowerCase() !== "z") return;
+    const active = document.activeElement;
+    const tag = (active && active.tagName) || "";
+    if (tag === "TEXTAREA" || (tag === "INPUT" && ["text","number"].includes(active.type))) return;
+    e.preventDefault();
+    undoOneStep();
+  });
+
   // ---- events: opacity (shared across image / text / shape layers) ----
   opacityRange.addEventListener("input", () => {
     const selected = getSelectedLayer();
     if (!selected) return;
+    beginHistoryChange();
     selected.opacity = parseFloat(opacityRange.value);
     opacityLabel.textContent = Math.round(selected.opacity) + "%";
     buildStage();
+  });
+  opacityRange.addEventListener("change", () => {
+    commitHistoryChange(() => `Changed opacity of layer ${layerLabel(getSelectedLayer())}`);
   });
 
   // ---- events: shape layers ----
@@ -2946,6 +3278,7 @@
     selected.shapeKind = shapeKindSelect.value;
     buildStage();
     syncTextControls();
+    recordHistory(`Changed style of layer ${layerLabel(selected)}`);
   });
 
   shapeFilledCheckbox.addEventListener("change", () => {
@@ -2954,14 +3287,19 @@
     selected.filled = shapeFilledCheckbox.checked;
     buildStage();
     syncTextControls();
+    recordHistory(`Changed style of layer ${layerLabel(selected)}`);
   });
 
   shapeStrokeWidthRange.addEventListener("input", () => {
     const selected = getSelectedLayer();
     if (!selected || selected.type !== "shape") return;
+    beginHistoryChange();
     selected.strokeWidth = parseFloat(shapeStrokeWidthRange.value);
     shapeStrokeWidthLabel.textContent = shapeStrokeWidthRange.value;
     buildStage();
+  });
+  shapeStrokeWidthRange.addEventListener("change", () => {
+    commitHistoryChange(() => `Changed style of layer ${layerLabel(getSelectedLayer())}`);
   });
 
   // ---- events: shape select (built-in shapes) ----
@@ -2971,6 +3309,7 @@
     currentShapeLabel = shape.label;
     updatePreviewFadeUI();
     parseAndLoadBackground(shape.svg);
+    recordHistory(`Changed grip panel to ${shape.label}`);
   });
 
   levelViewCheckbox.addEventListener("change", () => {
@@ -2993,6 +3332,7 @@
     updateSelectedLayerTransform();
     syncZoomSlider();
     syncRotationSlider();
+    recordHistory(`Resized layer ${layerLabel(selected)}`);
   });
 
   removeImgBtn.addEventListener("click", () => {
@@ -3004,17 +3344,25 @@
   zoomRange.addEventListener("input", () => {
     const selected = getSelectedLayer();
     if (!selected) return;
+    beginHistoryChange();
     selected.xform.scale = (selected.fitScale || 1) * (parseFloat(zoomRange.value) / 100);
     zoomLabel.textContent = zoomRange.value + "%";
     updateSelectedLayerTransform();
+  });
+  zoomRange.addEventListener("change", () => {
+    commitHistoryChange(() => `Resized layer ${layerLabel(getSelectedLayer())}`);
   });
 
   rotRange.addEventListener("input", () => {
     const selected = getSelectedLayer();
     if (!selected) return;
+    beginHistoryChange();
     selected.xform.rot = parseFloat(rotRange.value);
     rotLabel.textContent = Math.round(selected.xform.rot) + "°";
     updateSelectedLayerTransform();
+  });
+  rotRange.addEventListener("change", () => {
+    commitHistoryChange(() => `Rotated layer ${layerLabel(getSelectedLayer())}`);
   });
 
   rotLeftBtn.addEventListener("click", () => {
@@ -3023,6 +3371,7 @@
     selected.xform.rot -= 15;
     updateSelectedLayerTransform();
     syncRotationSlider();
+    recordHistory(`Rotated layer ${layerLabel(selected)}`);
   });
   rotRightBtn.addEventListener("click", () => {
     const selected = getSelectedLayer();
@@ -3030,6 +3379,7 @@
     selected.xform.rot += 15;
     updateSelectedLayerTransform();
     syncRotationSlider();
+    recordHistory(`Rotated layer ${layerLabel(selected)}`);
   });
 
   guideCheckbox.addEventListener("change", () => {
@@ -3103,6 +3453,7 @@
     selected.xform.rot += (e.key === "]" ? step : -step);
     updateSelectedLayerTransform();
     syncRotationSlider();
+    recordHistory(`Rotated layer ${layerLabel(selected)}`);
   });
 
   window.addEventListener("resize", updateHandles);
@@ -3353,13 +3704,139 @@
     return `layer-${layer.id}`;
   }
 
+  // shared by both the live <layers> block and each <history><entry>'s own <layers> block —
+  // `imageFile` is the already-resolved zip path for image layers (or null), and `fontInfo`
+  // is the already-resolved { filename, label } for a custom-font text layer (or null); both
+  // are resolved by the caller since the two contexts dedupe assets differently (see below).
+  function writeLayerXMLAttrs(doc, layer, index, imageFile, fontInfo){
+    const el = doc.createElement("layer");
+    el.setAttribute("index", String(index));
+    el.setAttribute("id", String(layer.id));
+    el.setAttribute("type", layer.type);
+    el.setAttribute("cx", String(layer.xform.cx));
+    el.setAttribute("cy", String(layer.xform.cy));
+    el.setAttribute("scale", String(layer.xform.scale));
+    el.setAttribute("rotation", String(layer.xform.rot));
+    el.setAttribute("opacity", String(layer.opacity == null ? 100 : layer.opacity));
+    el.setAttribute("naturalWidth", String(layer.naturalW));
+    el.setAttribute("naturalHeight", String(layer.naturalH));
+    if (imageFile) el.setAttribute("file", imageFile);
+
+    if (layer.type === "image"){
+      el.setAttribute("name", layer.name || "");
+      if (layer.flipX) el.setAttribute("flipX", "true");
+      if (layer.flipY) el.setAttribute("flipY", "true");
+      if (layer.origNaturalW != null){
+        el.setAttribute("origNaturalWidth", String(layer.origNaturalW));
+        el.setAttribute("origNaturalHeight", String(layer.origNaturalH));
+      }
+    } else if (layer.type === "shape"){
+      el.setAttribute("shapeKind", layer.shapeKind);
+      el.setAttribute("filled", String(!!layer.filled));
+      el.setAttribute("strokeWidth", String(layer.strokeWidth));
+      el.setAttribute("colorC", String(layer.color.c));
+      el.setAttribute("colorM", String(layer.color.m));
+      el.setAttribute("colorY", String(layer.color.y));
+      el.setAttribute("colorK", String(layer.color.k));
+    } else if (layer.type === "text"){
+      el.setAttribute("colorC", String(layer.color.c));
+      el.setAttribute("colorM", String(layer.color.m));
+      el.setAttribute("colorY", String(layer.color.y));
+      el.setAttribute("colorK", String(layer.color.k));
+      const isBuiltin = BUILTIN_FONTS.some((f) => f.value === layer.fontFamily);
+      if (isBuiltin){
+        el.setAttribute("fontSource", "builtin");
+        el.setAttribute("fontFamily", layer.fontFamily);
+      } else {
+        el.setAttribute("fontSource", "custom");
+        if (fontInfo){
+          el.setAttribute("fontFile", "fonts/" + fontInfo.filename);
+          el.setAttribute("fontLabel", fontInfo.label);
+        }
+      }
+      const contentEl = doc.createElement("content");
+      contentEl.appendChild(doc.createCDATASection(layer.text || ""));
+      el.appendChild(contentEl);
+    }
+    return el;
+  }
+
+  // resolves (creating if needed) the zip filename for a custom font family, reusing
+  // fontFilesMap across both the live layers and every history entry so each unique
+  // uploaded font is only written into fonts/ once regardless of how many places use it.
+  function resolveFontInfo(doc, zip, fontFilesMap, familyName, usedFontNames){
+    const isBuiltin = BUILTIN_FONTS.some((f) => f.value === familyName);
+    if (isBuiltin) return null;
+    let info = fontFilesMap.get(familyName);
+    if (info) return info;
+    const faces = customFonts[familyName];
+    if (!faces || !faces.length) return null;
+    const label = customFontLabels[familyName] || familyName;
+    const blob = dataURLtoBlob(faces[0].dataURL);
+    const ext = /otf/i.test(blob.type) ? "otf" : "ttf";
+    const filename = uniqueZipName(usedFontNames, familyName.replace(/[^a-z0-9-]+/gi, "_") + "." + ext);
+    zip.folder("fonts").file(filename, blob);
+    info = { filename, label };
+    fontFilesMap.set(familyName, info);
+    return info;
+  }
+
+  // history entries get their own image-asset pool (history-assets/), deduped by dataURL
+  // content so a layer's image that's unchanged across many history steps (the common case
+  // for drags/rotations/etc.) is only written once rather than once per entry.
+  function buildHistoryXML(doc, zip, fontFilesMap, usedFontNames){
+    const historyEl = doc.createElement("history");
+    historyEl.setAttribute("currentIndex", String(historyIndex));
+    const imageCache = new Map();
+    const usedHistNames = new Set();
+
+    historyStack.forEach((entry, idx) => {
+      const entryEl = doc.createElement("entry");
+      entryEl.setAttribute("index", String(idx));
+      entryEl.setAttribute("description", entry.desc || "");
+      if (entry.state.selectedLayerId != null) entryEl.setAttribute("selectedLayerId", String(entry.state.selectedLayerId));
+
+      const bgEl = doc.createElement("background");
+      bgEl.setAttribute("shape", entry.state.shapeKey || "");
+      bgEl.setAttribute("levelView", String(!!entry.state.levelView));
+      entryEl.appendChild(bgEl);
+
+      const layersEl = doc.createElement("layers");
+      entry.state.layers.forEach((layer, i) => {
+        let imageFile = null;
+        if (layer.type === "image" && layer.dataURL){
+          imageFile = imageCache.get(layer.dataURL);
+          if (!imageFile){
+            const blob = dataURLtoBlob(layer.dataURL);
+            const name = uniqueZipName(usedHistNames, `hist-${idx}-${i}.${extFromMime(blob.type)}`);
+            zip.folder("history-assets").file(name, blob);
+            imageFile = "history-assets/" + name;
+            imageCache.set(layer.dataURL, imageFile);
+          }
+        }
+        const fontInfo = layer.type === "text" ? resolveFontInfo(doc, zip, fontFilesMap, layer.fontFamily, usedFontNames) : null;
+        layersEl.appendChild(writeLayerXMLAttrs(doc, layer, i, imageFile, fontInfo));
+      });
+      entryEl.appendChild(layersEl);
+
+      const thumbEl = doc.createElement("thumbnail");
+      thumbEl.appendChild(doc.createCDATASection(entry.thumbnail || ""));
+      entryEl.appendChild(thumbEl);
+
+      historyEl.appendChild(entryEl);
+    });
+
+    return historyEl;
+  }
+
   // ---- export: project.xml — position/size/rotation/stacking data for every layer, plus ----
   // ---- which background shape was used, so the zip can be re-loaded exactly as exported. ----
-  function buildProjectXML(assetFilenames, fontFilesMap){
+  function buildProjectXML(assetFilenames, fontFilesMap, zip){
     const doc = document.implementation.createDocument(null, "gripCustomizerProject", null);
     const root = doc.documentElement;
-    root.setAttribute("version", "1");
+    root.setAttribute("version", "2");
     root.setAttribute("exportedAt", new Date().toISOString());
+    root.setAttribute("layerIdCounter", String(layerIdCounter));
 
     const bgEl = doc.createElement("background");
     bgEl.setAttribute("shape", shapeSelect.value);
@@ -3369,59 +3846,18 @@
 
     const layersEl = doc.createElement("layers");
     layers.forEach((layer, i) => {
-      const el = doc.createElement("layer");
-      el.setAttribute("index", String(i));
-      el.setAttribute("type", layer.type);
-      el.setAttribute("cx", String(layer.xform.cx));
-      el.setAttribute("cy", String(layer.xform.cy));
-      el.setAttribute("scale", String(layer.xform.scale));
-      el.setAttribute("rotation", String(layer.xform.rot));
-      el.setAttribute("opacity", String(layer.opacity == null ? 100 : layer.opacity));
-      el.setAttribute("naturalWidth", String(layer.naturalW));
-      el.setAttribute("naturalHeight", String(layer.naturalH));
       const fname = assetFilenames.get(layer.id);
-      if (fname) el.setAttribute("file", "original-images/" + fname);
-
-      if (layer.type === "image"){
-        el.setAttribute("name", layer.name || "");
-        if (layer.flipX) el.setAttribute("flipX", "true");
-        if (layer.flipY) el.setAttribute("flipY", "true");
-        if (layer.origNaturalW != null){
-          el.setAttribute("origNaturalWidth", String(layer.origNaturalW));
-          el.setAttribute("origNaturalHeight", String(layer.origNaturalH));
-        }
-      } else if (layer.type === "shape"){
-        el.setAttribute("shapeKind", layer.shapeKind);
-        el.setAttribute("filled", String(!!layer.filled));
-        el.setAttribute("strokeWidth", String(layer.strokeWidth));
-        el.setAttribute("colorC", String(layer.color.c));
-        el.setAttribute("colorM", String(layer.color.m));
-        el.setAttribute("colorY", String(layer.color.y));
-        el.setAttribute("colorK", String(layer.color.k));
-      } else if (layer.type === "text"){
-        el.setAttribute("colorC", String(layer.color.c));
-        el.setAttribute("colorM", String(layer.color.m));
-        el.setAttribute("colorY", String(layer.color.y));
-        el.setAttribute("colorK", String(layer.color.k));
-        const isBuiltin = BUILTIN_FONTS.some((f) => f.value === layer.fontFamily);
-        if (isBuiltin){
-          el.setAttribute("fontSource", "builtin");
-          el.setAttribute("fontFamily", layer.fontFamily);
-        } else {
-          el.setAttribute("fontSource", "custom");
-          const info = fontFilesMap.get(layer.fontFamily);
-          if (info){
-            el.setAttribute("fontFile", "fonts/" + info.filename);
-            el.setAttribute("fontLabel", info.label);
-          }
-        }
-        const contentEl = doc.createElement("content");
-        contentEl.appendChild(doc.createCDATASection(layer.text || ""));
-        el.appendChild(contentEl);
-      }
-      layersEl.appendChild(el);
+      const imageFile = fname ? "original-images/" + fname : null;
+      const fontInfo = layer.type === "text" && !BUILTIN_FONTS.some((f) => f.value === layer.fontFamily)
+        ? fontFilesMap.get(layer.fontFamily) : null;
+      layersEl.appendChild(writeLayerXMLAttrs(doc, layer, i, imageFile, fontInfo));
     });
     root.appendChild(layersEl);
+
+    if (zip && historyStack.length){
+      const usedFontNames = new Set(Array.from(fontFilesMap.values()).map((v) => v.filename));
+      root.appendChild(buildHistoryXML(doc, zip, fontFilesMap, usedFontNames));
+    }
 
     return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(doc);
   }
@@ -3501,7 +3937,7 @@
               fontFilesMap.set(layer.fontFamily, { filename, label });
             });
 
-            zip.file("project.xml", buildProjectXML(assetFilenames, fontFilesMap));
+            zip.file("project.xml", buildProjectXML(assetFilenames, fontFilesMap, zip));
 
             zip.generateAsync({ type: "blob" }).then((zipBlob) => {
               triggerDownload(zipBlob, buildExportFilename("zip"));
@@ -3561,8 +3997,12 @@
 
   // builds one layer object (without a runtime id) from a <layer> element of project.xml,
   // resolving any referenced asset (image data / custom font file) out of the zip first.
+  // reads the "file" attribute for the image path — its value already disambiguates live
+  // vs. history-owned assets via folder prefix ("original-images/" vs "history-assets/"),
+  // so both contexts share the same attribute name.
   function buildLayerFromXML(el, zip, fontImportCache){
     const type = el.getAttribute("type");
+    const idAttr = el.hasAttribute("id") ? parseInt(el.getAttribute("id"), 10) : null;
     const xform = {
       cx: parseFloat(el.getAttribute("cx")) || 0,
       cy: parseFloat(el.getAttribute("cy")) || 0,
@@ -3579,6 +4019,7 @@
         const origW = el.hasAttribute("origNaturalWidth") ? parseFloat(el.getAttribute("origNaturalWidth")) : naturalW;
         const origH = el.hasAttribute("origNaturalHeight") ? parseFloat(el.getAttribute("origNaturalHeight")) : naturalH;
         return {
+          id: idAttr,
           type: "image",
           name: el.getAttribute("name") || "image.png",
           naturalW, naturalH,
@@ -3602,6 +4043,7 @@
 
     if (type === "shape"){
       return Promise.resolve({
+        id: idAttr,
         type: "shape",
         shapeKind: el.getAttribute("shapeKind") || "rectangle",
         filled: el.getAttribute("filled") !== "false",
@@ -3617,6 +4059,7 @@
     if (type === "text"){
       const contentEl = el.querySelector("content");
       const layer = {
+        id: idAttr,
         type: "text",
         text: contentEl ? contentEl.textContent : "",
         color, fillColor,
@@ -3652,7 +4095,7 @@
     return Promise.resolve(null);
   }
 
-  function applyImportedProject(shapeValue, wantLevelView, newLayers){
+  function applyImportedProject(shapeValue, wantLevelView, newLayers, savedCounter){
     const shape = BUILTIN_SHAPES[shapeValue] || BUILTIN_SHAPES.left;
     currentShapeLabel = shape.label;
     shapeSelect.value = BUILTIN_SHAPES[shapeValue] ? shapeValue : "left";
@@ -3662,8 +4105,10 @@
     levelView = !!wantLevelView && !levelViewCheckbox.disabled;
     levelViewCheckbox.checked = levelView;
 
+    if (savedCounter != null) layerIdCounter = Math.max(layerIdCounter, savedCounter);
     layers = newLayers.map((l) => {
-      l.id = ++layerIdCounter;
+      if (l.id == null) l.id = ++layerIdCounter;
+      else layerIdCounter = Math.max(layerIdCounter, l.id);
       if (bg) l.fitScale = Math.max(bg.clipBBoxRect.w/l.naturalW, bg.clipBBoxRect.h/l.naturalH) || 1;
       return l;
     });
@@ -3678,6 +4123,26 @@
     syncTextControls();
   }
 
+  // parses a saved <history><entry> element back into a { desc, thumbnail, state } entry —
+  // its layers' "file" attributes point into history-assets/ rather than original-images/,
+  // but buildLayerFromXML doesn't need to know the difference (see its comment above).
+  function buildHistoryEntryFromXML(entryEl, zip, fontImportCache){
+    const entryLayerEls = Array.from(entryEl.querySelectorAll(":scope > layers > layer"));
+    const entryBgEl = entryEl.querySelector(":scope > background");
+    const thumbEl = entryEl.querySelector(":scope > thumbnail");
+    return Promise.all(entryLayerEls.map((el) => buildLayerFromXML(el, zip, fontImportCache)))
+      .then((entryLayers) => ({
+        desc: entryEl.getAttribute("description") || "",
+        thumbnail: thumbEl ? thumbEl.textContent : null,
+        state: {
+          shapeKey: entryBgEl ? entryBgEl.getAttribute("shape") : "left",
+          levelView: entryBgEl ? entryBgEl.getAttribute("levelView") === "true" : false,
+          selectedLayerId: entryEl.hasAttribute("selectedLayerId") ? parseInt(entryEl.getAttribute("selectedLayerId"), 10) : null,
+          layers: entryLayers.filter(Boolean)
+        }
+      }));
+  }
+
   function importProjectZip(file){
     if (!file) return;
     if (layers.length && !confirm("Loading this project will replace your current layers. Continue?")) return;
@@ -3689,16 +4154,39 @@
         const doc = new DOMParser().parseFromString(xmlText, "application/xml");
         if (doc.querySelector("parsererror")) throw new Error("Couldn't parse project.xml in that zip.");
         const root = doc.documentElement;
-        const bgEl = root.querySelector("background");
+        const bgEl = root.querySelector(":scope > background");
         const shapeValue = bgEl ? bgEl.getAttribute("shape") : null;
         const wantLevelView = bgEl ? bgEl.getAttribute("levelView") === "true" : false;
-        const layerEls = Array.from(root.querySelectorAll("layers > layer"));
+        const savedCounterAttr = root.getAttribute("layerIdCounter");
+        const savedCounter = savedCounterAttr != null ? parseInt(savedCounterAttr, 10) : null;
+        const layerEls = Array.from(root.querySelectorAll(":scope > layers > layer"));
         const fontImportCache = new Map();
-        return Promise.all(layerEls.map((el) => buildLayerFromXML(el, zip, fontImportCache)))
-          .then((newLayers) => ({ shapeValue, wantLevelView, newLayers: newLayers.filter(Boolean) }));
+
+        const layersPromise = Promise.all(layerEls.map((el) => buildLayerFromXML(el, zip, fontImportCache)))
+          .then((newLayers) => newLayers.filter(Boolean));
+
+        const historyEl = root.querySelector(":scope > history");
+        const historyPromise = historyEl
+          ? Promise.all(Array.from(historyEl.querySelectorAll(":scope > entry")).map((entryEl) => buildHistoryEntryFromXML(entryEl, zip, fontImportCache)))
+            .then((entries) => ({
+              entries,
+              currentIndex: historyEl.hasAttribute("currentIndex") ? parseInt(historyEl.getAttribute("currentIndex"), 10) : entries.length - 1
+            }))
+          : Promise.resolve(null);
+
+        return Promise.all([layersPromise, historyPromise]).then(([newLayers, historyData]) => ({
+          shapeValue, wantLevelView, newLayers, savedCounter, historyData
+        }));
       });
-    }).then(({ shapeValue, wantLevelView, newLayers }) => {
-      applyImportedProject(shapeValue, wantLevelView, newLayers);
+    }).then(({ shapeValue, wantLevelView, newLayers, savedCounter, historyData }) => {
+      applyImportedProject(shapeValue, wantLevelView, newLayers, savedCounter);
+      if (historyData && historyData.entries.length){
+        historyStack = historyData.entries;
+        historyIndex = Math.max(0, Math.min(historyData.currentIndex, historyStack.length - 1));
+        renderHistoryPanel();
+      } else {
+        resetHistoryForFreshLoad("Loaded project");
+      }
     }).catch((err) => {
       console.error(err);
       alert("Couldn't load that project zip. " + (err && err.message ? err.message : ""));
@@ -3790,6 +4278,7 @@
   renderLayerList();
   updateControlsEnabled();
   syncTextControls();
+  resetHistoryForFreshLoad("Start");
 })();
 </script>
 </body>
