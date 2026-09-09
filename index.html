@@ -901,8 +901,12 @@
   // mask itself precisely to the true dark edge band from the artwork instead of an
   // approximated stroke band. On the artboard itself, only the edge path is ever drawn,
   // filled bone white — so the panel reads as one uniform color until fade preview is on.
+  // Left panel now also carries its own edge-fade ring around each screw hole (the
+  // reference art's black ring between the hole's actual white cutout and the grey face) —
+  // captured via invisible `data-role="hole-fade-ring"` circles at the ring's outer radius,
+  // so appendEdgeFadeDefs can add that annulus to the fade mask alongside the perimeter band.
   const SVG_LEFT = `<?xml version="1.0" encoding="UTF-8"?>
-<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 252.64 704.89">
+<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 172.47 480.94">
   <defs>
     <style>
       .cls-edge {
@@ -910,8 +914,10 @@
       }
     </style>
   </defs>
-  <path class="cls-edge" fill-rule="evenodd" d="M0,660.78L35.09,8.8c7.57-2.47,16.48-4.82,26.56-6.47C74.8.19,86.55-.22,96.24.09c19.62,2.58,44.67,7.73,72.38,18.32,25.58,9.77,46.28,21.46,61.96,31.81,7.35,200.51,14.7,401.02,22.06,601.53-5.77,1.16-23.05,5.42-36.9,21.26-10.9,12.47-14.14,25.78-15.23,31.88-66.84-14.7-133.67-29.41-200.51-44.11Z M158.05,85.04A24.47,24.47 0 1,0 109.11,85.04A24.47,24.47 0 1,0 158.05,85.04Z M157.91,603.16A24.47,24.47 0 1,0 108.97,603.16A24.47,24.47 0 1,0 157.91,603.16Z"/>
-  <path data-role="edge-face" d="M8.12,658.8L41.74,11.01c19.08-2.38,43.25-3.46,70.8,0,49.78,6.26,87.66,24.49,110.62,38.05,7.37,198.23,14.75,396.46,22.12,594.69-6.28,1.35-21.72,5.58-34.51,19.47-7.49,8.13-11.31,16.56-13.27,22.12-3.98-.95-9.09-2.16-15.04-3.54-5.78-1.34-14.87-3.42-26.16-5.88-20.48-4.47-24.98-5.14-43.07-9-21.61-4.62-25.66-5.91-32.86-7.35-16.13-3.23-40.04-5.63-72.25-.77Z"/>
+  <path class="cls-edge" fill-rule="evenodd" d="M.52,451.78C7.71,302.98,14.9,154.19,22.08,5.39,30.13,3.28,42.03.86,56.59.54c30.58-.69,53.64,8.52,65.77,13.48,8.83,3.61,20.54,9.19,33.43,17.79,5.39,136.04,10.78,272.08,16.17,408.11-4.87,1.92-14.69,6.55-23.18,16.71-7.73,9.26-10.67,18.69-11.86,23.72-45.47-9.52-90.93-19.05-136.4-28.57Z M104.34,55.32A14.77,14.77 0 1,0 74.8,55.32A14.77,14.77 0 1,0 104.34,55.32Z M105.11,414.04A14.56,14.56 0 1,0 75.99,414.04A14.56,14.56 0 1,0 105.11,414.04Z"/>
+  <path data-role="edge-face" d="M9.15,445.85L26.94,10.24c10.73-2.64,24.28-4.75,39.89-4.31,38.63,1.08,67.36,17.11,81.41,26.42,5.39,133.52,10.78,267.04,16.17,400.57-4.89,1.91-14.42,6.4-22.64,16.17-6.38,7.58-9.36,15.22-10.78,19.95-5.13-1.66-10.34-3.28-15.63-4.85-28.1-8.32-55.19-14.23-80.87-18.33-3.98-.34-8.31-.55-12.94-.54-4.43,0-8.57.21-12.4.54Z"/>
+  <circle data-role="hole-fade-ring" cx="89.57" cy="55.32" r="17.48"/>
+  <circle data-role="hole-fade-ring" cx="90.55" cy="414.04" r="17.48"/>
 </svg>`;
 
   const SVG_RIGHT = `<?xml version="1.0" encoding="UTF-8"?>
@@ -953,8 +959,12 @@
   <path class="cls-1" d="M342.73.5C337.88.48,72.73,70.36.7,93.25v.1c-.16,17.01-.02,34.32-.06,51.39-1.08,7.59,4.57,11.45,10.61,14.5,27.2,17.5,54.03,39.29,68.13,69.17,6.68,15.24,13.1,32.77,11.84,49.35-14.55,123.2-30.79,266.94-31.92,309.61-2.78,48.18-6.14,69.83,15.55,115.81,4.87,9.55,10.08,20.79,16.74,28.03,11.22-2.8,124.79-32.96,190.35-50.21,23.98-6.73,40.65-10.09,44.57-11.97,1.58-119.7.58-239.98,1.3-359.81.84-6.73-3.75-10.55-8.46-14.33-16.71-15.03-21.19-40.75-3.3-56.94,14.17-11.45,11.75-3.1,11.78-23.65.18-32.38-1.48-49.28,3.61-73.92,1.76-11.9,9.18-22.39,11.3-33.85,0-11.91,0-79.62,0-106.03ZM213.13,611.75c-11.75,0-21.27-9.52-21.27-21.27s9.52-21.27,21.27-21.27,21.27,9.52,21.27,21.27-9.52,21.27-21.27,21.27ZM213.13,229.07c-11.75,0-21.27-9.52-21.27-21.27s9.52-21.27,21.27-21.27,21.27,9.52,21.27,21.27-9.52,21.27-21.27,21.27Z"/>
 </svg>`;
 
+  // `refLengthMM` is the real-world bottom-most-to-top-most measurement of that panel,
+  // used by appendEdgeFadeDefs to convert its physical edge-fade width (FADE_MM) into SVG
+  // units at the correct scale. Shapes without a known measurement fall back to a generic
+  // ~5in (127mm) grip-panel assumption (see appendEdgeFadeDefs).
   const BUILTIN_SHAPES = {
-    left: { label: "1911 Left", svg: SVG_LEFT },
+    left: { label: "1911 Left", svg: SVG_LEFT, refLengthMM: 105.55 },
     right: { label: "1911 Right", svg: SVG_RIGHT },
     "92fs-left": { label: "92FS Left", svg: SVG_92FS_LEFT },
     "92fs-right": { label: "92FS Right", svg: SVG_92FS_RIGHT }
@@ -993,7 +1003,7 @@
   };
 
   // ---- state ----
-  let bg = null;              // { w, h, viewBox, bgClones, clipClones, holeCircles, edgeFaceClone, clipBBoxRect }
+  let bg = null;              // { w, h, viewBox, bgClones, clipClones, holeCircles, edgeFaceClone, holeFadeRings, clipBBoxRect }
   let layers = [];             // [{ id, type:'image'|'text'|'shape', name, naturalW, naturalH, xform:{cx,cy,scale,rot}, fitScale, opacity, ... }]
   let selectedLayerId = null;
   let layerIdCounter = 0;
@@ -1869,9 +1879,15 @@
     // precisely mask the "preview edge fade" effect, never rendered or counted toward the
     // print clip.
     let edgeFaceClone = null;
+    // optional invisible marker circles (see SVG_LEFT) giving the outer radius of an
+    // edge-fade ring around a screw hole — the artwork's actual (smaller) hole radius is
+    // already recovered from holeCircles below, so together these define each ring's
+    // inner/outer bounds for appendEdgeFadeDefs.
+    const holeFadeRings = [];
 
     allShapes.forEach((el) => {
-      if (el.getAttribute("data-role") === "edge-face"){
+      const role = el.getAttribute("data-role");
+      if (role === "edge-face"){
         if (!edgeFaceClone){
           edgeFaceClone = el.cloneNode(false);
           edgeFaceClone.removeAttribute("class");
@@ -1879,6 +1895,14 @@
           edgeFaceClone.removeAttribute("fill");
           edgeFaceClone.removeAttribute("data-role");
         }
+        return;
+      }
+      if (role === "hole-fade-ring"){
+        holeFadeRings.push({
+          cx: parseFloat(el.getAttribute("cx")) || 0,
+          cy: parseFloat(el.getAttribute("cy")) || 0,
+          r: parseFloat(el.getAttribute("r")) || 0
+        });
         return;
       }
       let cs;
@@ -1986,7 +2010,7 @@
 
     bg = {
       w, h, viewBox: vb,
-      bgClones, clipClones, holeCircles, edgeFaceClone,
+      bgClones, clipClones, holeCircles, edgeFaceClone, holeFadeRings,
       clipBBoxRect: { x:clipBBox.x, y:clipBBox.y, w:clipBBox.x2-clipBBox.x, h:clipBBox.y2-clipBBox.y },
       levelTransform: computeLevelTransform(hullPoints, clipBBox, w, h)
     };
@@ -2042,7 +2066,10 @@
   function appendEdgeFadeDefs(defs, bg){
     const cbb = bg.clipBBoxRect;
     const FADE_MM = 4.5;
-    const REF_GRIP_LENGTH_MM = 127;
+    // prefer the selected panel's own measured length; fall back to a generic ~5in grip
+    // assumption for shapes we don't have a real measurement for.
+    const shapeDef = BUILTIN_SHAPES[shapeSelect.value];
+    const REF_GRIP_LENGTH_MM = (shapeDef && shapeDef.refLengthMM) || 127;
     const scaleUnitsPerMM = cbb.h / REF_GRIP_LENGTH_MM;
     let fadeUnits = scaleUnitsPerMM * FADE_MM;
     fadeUnits = Math.min(fadeUnits, cbb.w * 0.35);
@@ -2070,6 +2097,31 @@
       const faceClone = bg.edgeFaceClone.cloneNode(true);
       faceClone.setAttribute("fill", "#000000");
       edgeMask.appendChild(faceClone);
+
+      // some panels also carry an edge-fade ring around each screw hole (the artwork's
+      // dark annulus between the hole's actual cutout and the surrounding face) — add
+      // each ring back into the mask: a white circle at the ring's outer radius, then a
+      // black circle at the hole's own (smaller) radius to keep the real cutout excluded.
+      (bg.holeFadeRings || []).forEach((ring) => {
+        const hole = (bg.holeCircles || []).reduce((best, h) => {
+          const d = Math.hypot(h.cx - ring.cx, h.cy - ring.cy);
+          return (!best || d < best.d) ? { hole: h, d } : best;
+        }, null);
+        const outer = document.createElementNS(NS, "circle");
+        outer.setAttribute("cx", String(ring.cx));
+        outer.setAttribute("cy", String(ring.cy));
+        outer.setAttribute("r", String(ring.r));
+        outer.setAttribute("fill", "#ffffff");
+        edgeMask.appendChild(outer);
+        if (hole){
+          const inner = document.createElementNS(NS, "circle");
+          inner.setAttribute("cx", String(hole.hole.cx));
+          inner.setAttribute("cy", String(hole.hole.cy));
+          inner.setAttribute("r", String(hole.hole.r));
+          inner.setAttribute("fill", "#000000");
+          edgeMask.appendChild(inner);
+        }
+      });
     } else {
       const ribbonWidth = fadeUnits * 2; // stroked centered on the outline; only the inward half survives (clipped to the true silhouette below)
 
