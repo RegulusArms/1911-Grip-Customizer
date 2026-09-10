@@ -667,8 +667,10 @@
       </div>
       <div class="btn-row" style="margin-top:8px;">
         <button class="btn" id="previewFadeBtn" type="button">Preview edge fade</button>
+        <button class="btn" id="previewCmykBtn" type="button">Preview CMYK colors</button>
       </div>
       <p class="hint" id="previewFadeHint" style="display:none;margin:6px 0 0;text-align:left;">Simulated preview only (1911 grips) — shows how the ~2-3mm curved outer edges fade and shift color when printed. Not included in exports.</p>
+      <p class="hint" id="previewCmykHint" style="display:none;margin:6px 0 0;text-align:left;">Simulated preview only — approximates how uploaded photos shift toward printable CMYK colors (shape/text fills are already exact CMYK, so they're unaffected). Not included in exports.</p>
     </div>
 
     <hr class="sep">
@@ -1039,6 +1041,7 @@
   let historyBeforeSnapshot = null; // captured at the start of an in-progress drag/typing session
   let levelView = false;      // display-only: show the shape rotated so its bottom edge is level
   let previewFadeOn = false;  // display-only: simulate the curved-edge print fade on 1911 grips
+  let previewCmykOn = false;  // display-only: approximate how uploaded photos shift when printed in CMYK
   let colorSamplingActive = false;    // color dropper: hovering the stage previews a sampled color
   let sampleCanvasCtx = null;         // 2D context of the offscreen raster snapshot used for sampling
   let sampleCanvasScale = { x:1, y:1 }; // bg-space units -> sample canvas pixels
@@ -1060,6 +1063,8 @@
   const levelViewCheckbox = document.getElementById("levelViewCheckbox");
   const previewFadeBtn = document.getElementById("previewFadeBtn");
   const previewFadeHint = document.getElementById("previewFadeHint");
+  const previewCmykBtn = document.getElementById("previewCmykBtn");
+  const previewCmykHint = document.getElementById("previewCmykHint");
   const fitBtn = document.getElementById("fitBtn");
   const removeImgBtn = document.getElementById("removeImgBtn");
   const imageFieldsGroup = document.getElementById("imageFieldsGroup");
@@ -2123,7 +2128,61 @@
     previewFadeBtn.disabled = !eligible;
     previewFadeBtn.classList.toggle("active", previewFadeOn);
     previewFadeBtn.textContent = previewFadeOn ? "Preview edge fade: ON" : "Preview edge fade";
-    previewFadeHint.style.display = previewFadeOn ? "" : "none";
+    // previewFadeHint is kept in the DOM (see its markup) but stays hidden — no longer
+    // shown in the UI, per request.
+  }
+
+  // ---- preview-only "CMYK colors" simulation: approximates how uploaded photos (plain  ----
+  // ---- RGB, no CMYK ground truth) will shift once printed — reduced saturation plus a   ----
+  // ---- touch of gamma darkening, mimicking CMYK's narrower gamut and ink dot gain versus ----
+  // ---- an emissive RGB screen. Shape/text layers are already authored directly in CMYK   ----
+  // ---- (their fill is computed from the user's C/M/Y/K values via cmykToHex), so this    ----
+  // ---- preview leaves them untouched — applying it there would double-process an already-----
+  // ---- accurate color. Display-only, like edge fade: never applied to exports.           ----
+  function updatePreviewCmykUI(){
+    previewCmykBtn.classList.toggle("active", previewCmykOn);
+    previewCmykBtn.textContent = previewCmykOn ? "Preview CMYK colors: ON" : "Preview CMYK colors";
+    // previewCmykHint is kept in the DOM (see its markup) but stays hidden — no longer
+    // shown in the UI, per request.
+  }
+
+  function appendCmykPreviewDefs(defs){
+    const filter = document.createElementNS(NS, "filter");
+    filter.id = "cmykPreviewFilter";
+    filter.setAttribute("color-interpolation-filters", "sRGB");
+
+    const saturate = document.createElementNS(NS, "feColorMatrix");
+    saturate.setAttribute("type", "saturate");
+    saturate.setAttribute("values", "0.62");
+    saturate.setAttribute("result", "desaturated");
+    filter.appendChild(saturate);
+
+    // a gamma > 1 darkens midtones, and the linear term caps how bright/dark anything can
+    // get — a stand-in for ink dot gain and paper never reflecting as much light as a
+    // backlit screen, which together are most of why printed photos read as "flatter".
+    const gamma = document.createElementNS(NS, "feComponentTransfer");
+    gamma.setAttribute("in", "desaturated");
+    ["feFuncR", "feFuncG", "feFuncB"].forEach((tag) => {
+      const fn = document.createElementNS(NS, tag);
+      fn.setAttribute("type", "gamma");
+      fn.setAttribute("amplitude", "1");
+      fn.setAttribute("exponent", "1.35");
+      fn.setAttribute("offset", "0");
+      gamma.appendChild(fn);
+    });
+    filter.appendChild(gamma);
+
+    const contrast = document.createElementNS(NS, "feComponentTransfer");
+    ["feFuncR", "feFuncG", "feFuncB"].forEach((tag) => {
+      const fn = document.createElementNS(NS, tag);
+      fn.setAttribute("type", "linear");
+      fn.setAttribute("slope", "0.9");
+      fn.setAttribute("intercept", "0.04");
+      contrast.appendChild(fn);
+    });
+    filter.appendChild(contrast);
+
+    defs.appendChild(filter);
   }
 
   // Builds the pieces (in `defs`) needed to render a second, distorted copy of the layer
@@ -2331,6 +2390,7 @@
     if (fontStyle) defs.appendChild(fontStyle);
     const fadePreviewActive = previewFadeOn && isFadeEligibleShape();
     if (fadePreviewActive) appendEdgeFadeDefs(defs, bg);
+    if (previewCmykOn) appendCmykPreviewDefs(defs);
     stage.appendChild(defs);
 
     // everything below is nested in levelGroup so the optional "level view" rotation
@@ -2362,7 +2422,7 @@
       const layerG = document.createElementNS(NS, "g");
       layerG.id = "layerGroup-" + layer.id;
       layerG.setAttribute("transform", transformString(layer.xform));
-      layerG.appendChild(buildLayerVisual(layer));
+      layerG.appendChild(buildLayerVisual(layer, previewCmykOn && layer.type === "image"));
       clipG.appendChild(layerG);
     });
 
@@ -2375,7 +2435,7 @@
       layers.forEach((layer) => {
         const layerG = document.createElementNS(NS, "g");
         layerG.setAttribute("transform", transformString(layer.xform));
-        layerG.appendChild(buildLayerVisual(layer));
+        layerG.appendChild(buildLayerVisual(layer, previewCmykOn && layer.type === "image"));
         fadeOverlay.appendChild(layerG);
       });
       clipG.appendChild(fadeOverlay);
@@ -3506,6 +3566,12 @@
     buildStage();
   });
 
+  previewCmykBtn.addEventListener("click", () => {
+    previewCmykOn = !previewCmykOn;
+    updatePreviewCmykUI();
+    buildStage();
+  });
+
   // ---- events: controls ----
   fitBtn.addEventListener("click", () => {
     const selected = getSelectedLayer();
@@ -3651,7 +3717,10 @@
     return `${timestamp}-${shapeSlug}${suffixPart}.${ext}`;
   }
 
-  function buildLayerVisual(layer){
+  // `applyCmykPreview` is only ever passed true from the live buildStage() render (see
+  // updatePreviewCmykUI/appendCmykPreviewDefs) — export paths call this with one argument,
+  // so the simulated CMYK color shift never leaks into exported files.
+  function buildLayerVisual(layer, applyCmykPreview){
     let el;
     if (layer.type === "text"){
       el = createTextGroup(layer);
@@ -3669,6 +3738,7 @@
       if (layer.flipX || layer.flipY){
         el.setAttribute("transform", `scale(${layer.flipX ? -1 : 1} ${layer.flipY ? -1 : 1})`);
       }
+      if (applyCmykPreview) el.setAttribute("filter", "url(#cmykPreviewFilter)");
     }
     const opacity = layer.opacity == null ? 100 : layer.opacity;
     if (opacity < 100) el.setAttribute("opacity", String(Math.max(0, Math.min(100, opacity)) / 100));
@@ -4494,6 +4564,7 @@
   shapeSelect.value = "left";
   currentShapeLabel = BUILTIN_SHAPES.left.label;
   updatePreviewFadeUI();
+  updatePreviewCmykUI();
   parseAndLoadBackground(BUILTIN_SHAPES.left.svg);
   renderLayerList();
   updateControlsEnabled();
