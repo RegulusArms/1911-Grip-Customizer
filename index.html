@@ -1292,6 +1292,22 @@
     pushHistoryEntry(desc, serializeState());
   }
 
+  // updates the Start entry's own state instead of pushing a new one — used when the
+  // background shape changes while history is still sitting at Start (index 0), so idly
+  // trying out grip panels before making any real edit doesn't clutter the history list.
+  // Any entries past Start are dropped too, since they no longer follow from this Start.
+  function updateStartEntry(){
+    historyStack = historyStack.slice(0, 1);
+    const entry = historyStack[0];
+    entry.state = serializeState();
+    entry.thumbnail = null;
+    rasterizeThumbnail((dataUrl) => {
+      entry.thumbnail = dataUrl;
+      renderHistoryPanel();
+    });
+    renderHistoryPanel();
+  }
+
   function renderHistoryPanel(){
     if (!historyListEl) return;
     historyListEl.innerHTML = "";
@@ -3437,7 +3453,8 @@
     currentShapeLabel = shape.label;
     updatePreviewFadeUI();
     parseAndLoadBackground(shape.svg);
-    recordHistory(`Changed grip panel to ${shape.label}`);
+    if (historyIndex === 0) updateStartEntry();
+    else recordHistory(`Changed grip panel to ${shape.label}`);
   });
 
   levelViewCheckbox.addEventListener("change", () => {
