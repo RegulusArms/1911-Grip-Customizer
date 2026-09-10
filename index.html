@@ -1780,14 +1780,41 @@
   // finds the convex-hull edge that reads as the shape's "bottom edge" (long, in the
   // bottom half of the shape, already close to horizontal) and returns an SVG transform
   // that rotates the shape level around it, then scales it to keep it fully in view.
+  // Finds the hull edge that should become the level "floor" when rotated horizontal, by
+  // scoring each hull edge on how long it is and how close to the bottom it sits (once
+  // *its own* angle is leveled) and keeping the best. That scoring assumes the panel is
+  // already drawn close to upright, which holds for the 1911 shapes but not the 92FS
+  // artwork (authored at a much steeper native angle) — so first estimate the panel's own
+  // long axis via PCA over the hull and coarsely pre-rotate to vertical, putting any panel
+  // into roughly the same "already upright" starting condition before the edge search
+  // below (unchanged from the original 1911-tuned version) runs.
   function computeLevelTransform(points, bbox, w, h){
     if (points.length < 3) return null;
     const hull = convexHull(points);
     if (hull.length < 2) return null;
-    const bboxH = bbox.y2 - bbox.y;
+    const pivot = { x: (bbox.x + bbox.x2) / 2, y: (bbox.y + bbox.y2) / 2 };
+
+    let sxx = 0, syy = 0, sxy = 0;
+    hull.forEach((p) => {
+      const dx = p.x - pivot.x, dy = p.y - pivot.y;
+      sxx += dx * dx; syy += dy * dy; sxy += dx * dy;
+    });
+    const majorAxisDeg = 0.5 * Math.atan2(2 * sxy, sxx - syy) * 180 / Math.PI; // hull's long-axis angle from horizontal
+    let preRotation = 90 - majorAxisDeg; // rotates that long axis to vertical
+    preRotation = ((preRotation + 90) % 180 + 180) % 180 - 90; // normalize to (-90, 90]
+    const preRad = preRotation * Math.PI / 180;
+    const preCos = Math.cos(preRad), preSin = Math.sin(preRad);
+    const coarseHull = hull.map((p) => ({
+      x: pivot.x + (p.x - pivot.x) * preCos - (p.y - pivot.y) * preSin,
+      y: pivot.y + (p.x - pivot.x) * preSin + (p.y - pivot.y) * preCos
+    }));
+    let cby = Infinity, cby2 = -Infinity;
+    coarseHull.forEach((p) => { cby = Math.min(cby, p.y); cby2 = Math.max(cby2, p.y); });
+    const coarseBboxH = cby2 - cby;
+
     let best = null;
-    for (let i = 0; i < hull.length; i++){
-      const p1 = hull[i], p2 = hull[(i + 1) % hull.length];
+    for (let i = 0; i < coarseHull.length; i++){
+      const p1 = coarseHull[i], p2 = coarseHull[(i + 1) % coarseHull.length];
       const dx = p2.x - p1.x, dy = p2.y - p1.y;
       const len = Math.hypot(dx, dy);
       if (len < 1) continue;
@@ -1795,15 +1822,17 @@
       if (angleDeg > 90) angleDeg -= 180;
       if (angleDeg < -90) angleDeg += 180;
       const midY = (p1.y + p2.y) / 2;
-      if (Math.abs(angleDeg) > 35) continue;          // not "slightly" tilted - skip
-      if (midY < bbox.y + bboxH * 0.5) continue;       // not in the bottom half - skip
-      const score = len + (midY - bbox.y);
+      if (Math.abs(angleDeg) > 35) continue;          // not "slightly" tilted (once upright) - skip
+      if (midY < cby + coarseBboxH * 0.5) continue;    // not in the bottom half - skip
+      const score = len + (midY - cby);
       if (!best || score > best.score) best = { angleDeg, score };
     }
-    if (!best || Math.abs(best.angleDeg) < 0.5) return null;
+    if (!best) return null;
 
-    const angle = -best.angleDeg;
-    const pivot = { x: (bbox.x + bbox.x2) / 2, y: (bbox.y + bbox.y2) / 2 };
+    // the coarse pre-rotation and the fine per-edge correction share the same pivot, so
+    // they compose into a single rotation by simple addition.
+    const angle = preRotation - best.angleDeg;
+    if (Math.abs(angle) < 0.5) return null;
     const rad = angle * Math.PI / 180;
     const cos = Math.cos(rad), sin = Math.sin(rad);
     let rx = Infinity, ry = Infinity, rx2 = -Infinity, ry2 = -Infinity;
@@ -3599,7 +3628,11 @@
     return g;
   }
 
-  function buildClippedLayersSvg(){
+  // `useLevel` mirrors buildStage's levelGroup: when true and the shape has a usable
+  // levelTransform, the background + clipped layer content are rotated/rescaled together
+  // exactly as the on-screen "Level view" checkbox does — the transform is pre-calibrated
+  // to fit within the same bg.viewBox, so no other geometry here needs to change.
+  function buildClippedLayersSvg(useLevel){
     const outSvg = document.createElementNS(NS, "svg");
     outSvg.setAttribute("xmlns", NS);
     outSvg.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:xlink", XLINK);
@@ -3616,14 +3649,18 @@
     if (fontStyle1) defs.appendChild(fontStyle1);
     outSvg.appendChild(defs);
 
+    const levelG = document.createElementNS(NS, "g");
+    if (useLevel && bg.levelTransform) levelG.setAttribute("transform", bg.levelTransform.str);
+    outSvg.appendChild(levelG);
+
     const bgGroup = document.createElementNS(NS, "g");
     bg.bgClones.forEach((c) => bgGroup.appendChild(c.cloneNode(true)));
-    outSvg.appendChild(bgGroup);
+    levelG.appendChild(bgGroup);
 
     const clipG = document.createElementNS(NS, "g");
     clipG.setAttribute("clip-path", "url(#exportClip)");
     layers.forEach((layer) => clipG.appendChild(buildLayerGroup(layer)));
-    outSvg.appendChild(clipG);
+    levelG.appendChild(clipG);
 
     return outSvg;
   }
@@ -3634,20 +3671,32 @@
     return pts.map(([lx, ly]) => localToStage(layer.xform, lx, ly));
   }
 
-  function computeFullLayersBounds(){
+  // `matrix`, when given, is bg.levelTransform.matrix — the same transform the leveled
+  // render will apply to its content, so bounds are computed in that rotated space instead
+  // (otherwise a leveled render could clip layers that only overhang once rotated).
+  function computeFullLayersBounds(matrix){
     let minX = 0, minY = 0, maxX = bg.w, maxY = bg.h;
+    if (matrix){
+      minX = minY = Infinity; maxX = maxY = -Infinity;
+      [[0,0],[bg.w,0],[bg.w,bg.h],[0,bg.h]].forEach(([x,y]) => {
+        const p = applyMatrix(matrix, { x, y });
+        minX = Math.min(minX, p.x); minY = Math.min(minY, p.y);
+        maxX = Math.max(maxX, p.x); maxY = Math.max(maxY, p.y);
+      });
+    }
     layers.forEach((layer) => {
       layerCorners(layer).forEach((p) => {
-        minX = Math.min(minX, p.x);
-        minY = Math.min(minY, p.y);
-        maxX = Math.max(maxX, p.x);
-        maxY = Math.max(maxY, p.y);
+        const pt = matrix ? applyMatrix(matrix, p) : p;
+        minX = Math.min(minX, pt.x);
+        minY = Math.min(minY, pt.y);
+        maxX = Math.max(maxX, pt.x);
+        maxY = Math.max(maxY, pt.y);
       });
     });
     return { x:minX, y:minY, w:maxX-minX, h:maxY-minY };
   }
 
-  function buildFullLayersSvg(bounds){
+  function buildFullLayersSvg(bounds, useLevel){
     const outSvg = document.createElementNS(NS, "svg");
     outSvg.setAttribute("xmlns", NS);
     outSvg.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:xlink", XLINK);
@@ -3662,7 +3711,10 @@
       outSvg.appendChild(defs);
     }
 
-    layers.forEach((layer) => outSvg.appendChild(buildLayerGroup(layer)));
+    const levelG = document.createElementNS(NS, "g");
+    if (useLevel && bg.levelTransform) levelG.setAttribute("transform", bg.levelTransform.str);
+    outSvg.appendChild(levelG);
+    layers.forEach((layer) => levelG.appendChild(buildLayerGroup(layer)));
 
     return outSvg;
   }
@@ -3748,8 +3800,8 @@
   }
 
   // ---- export: clipped JPG (what shows through the shape) ----
-  function buildJPGBlob(cb){
-    const outSvg = buildClippedLayersSvg();
+  function buildJPGBlob(cb, useLevel){
+    const outSvg = buildClippedLayersSvg(useLevel);
     const longSide = Math.max(bg.w, bg.h);
     const exportScale = Math.max(1, Math.min(8, Math.round(2400 / longSide)));
     const canvasW = Math.max(1, Math.round(bg.w * exportScale));
@@ -3758,9 +3810,10 @@
   }
 
   // ---- export: full, unclipped layer stack as PNG, extended to cover every layer ----
-  function buildFullLayersPNGBlob(cb){
-    const bounds = computeFullLayersBounds();
-    const outSvg = buildFullLayersSvg(bounds);
+  function buildFullLayersPNGBlob(cb, useLevel){
+    const matrix = (useLevel && bg.levelTransform) ? bg.levelTransform.matrix : null;
+    const bounds = computeFullLayersBounds(matrix);
+    const outSvg = buildFullLayersSvg(bounds, useLevel);
     const longSide = Math.max(bounds.w, bounds.h);
     const exportScale = Math.max(1, Math.min(8, Math.round(3000 / longSide)));
     const canvasW = Math.max(1, Math.round(bounds.w * exportScale));
@@ -3961,8 +4014,20 @@
     return '<?xml version="1.0" encoding="UTF-8"?>\n' + new XMLSerializer().serializeToString(doc);
   }
 
-  // ---- export: zip containing the JPG mockup, full-layers PNG, a PNG of each individual ----
-  // ---- layer, project.xml (position/size/stacking + background shape), and originals    ----
+  // wraps a callback-style blob builder (buildJPGBlob / buildFullLayersPNGBlob, both
+  // `(cb, useLevel)`) as a promise so exportZip can request the normal and level-view
+  // renders together via Promise.all instead of nesting a callback per variant.
+  function blobPromise(builder, useLevel){
+    return new Promise((resolve, reject) => {
+      builder((blob, err) => {
+        if (err) reject(new Error(err)); else resolve(blob);
+      }, useLevel);
+    });
+  }
+
+  // ---- export: zip containing the JPG mockup (in both normal and level views, when the ----
+  // ---- shape supports it), the full-layers PNG, a PNG of each individual layer,         ----
+  // ---- project.xml (position/size/stacking + background shape), and originals           ----
   function exportZip(){
     if (!layers.length || !bg){
       alert("Add at least one image layer first.");
@@ -3982,21 +4047,25 @@
       if (def && def.google) neededFamilies.add(def.google);
     });
 
-    Promise.all(Array.from(neededFamilies).map(ensureGoogleFontEmbedded)).then(() => {
-      buildJPGBlob((jpgBlob, jpgErr) => {
-        if (jpgErr){ alert(jpgErr); resetDownloadZipBtn(); return; }
-        buildFullLayersPNGBlob((pngBlob, pngErr) => {
-          if (pngErr){ alert(pngErr); resetDownloadZipBtn(); return; }
+    const hasLevelView = !!bg.levelTransform;
 
-          const nonImageLayers = layers.filter((l) => l.type !== "image");
-          Promise.all(nonImageLayers.map((layer) => new Promise((resolve, reject) => {
-            buildSingleLayerPNGBlob(layer, (blob, err) => {
-              if (err) reject(new Error(err)); else resolve({ layer, blob });
-            });
-          }))).then((rendered) => {
+    Promise.all(Array.from(neededFamilies).map(ensureGoogleFontEmbedded)).then(() => {
+      return Promise.all([
+        blobPromise(buildJPGBlob, false),
+        blobPromise(buildFullLayersPNGBlob, false),
+        hasLevelView ? blobPromise(buildJPGBlob, true) : Promise.resolve(null)
+      ]);
+    }).then(([jpgBlob, pngBlob, levelJpgBlob]) => {
+      const nonImageLayers = layers.filter((l) => l.type !== "image");
+      return Promise.all(nonImageLayers.map((layer) => new Promise((resolve, reject) => {
+        buildSingleLayerPNGBlob(layer, (blob, err) => {
+          if (err) reject(new Error(err)); else resolve({ layer, blob });
+        });
+      }))).then((rendered) => {
             const zip = new JSZip();
             zip.file(buildExportFilename("jpg"), jpgBlob);
             zip.file(buildExportFilename("png", "full-layers"), pngBlob);
+            if (levelJpgBlob) zip.file(buildExportFilename("jpg", "level-view"), levelJpgBlob);
 
             const originalsFolder = zip.folder("original-images");
             const usedNames = new Set();
@@ -4045,12 +4114,10 @@
               alert("Export failed while creating the zip file.");
               resetDownloadZipBtn();
             });
-          }).catch(() => {
-            alert("Export failed while rendering one of the layers.");
-            resetDownloadZipBtn();
           });
-        });
-      });
+    }).catch((err) => {
+      alert(err && err.message ? err.message : "Export failed while rendering one of the layers.");
+      resetDownloadZipBtn();
     });
   }
 
