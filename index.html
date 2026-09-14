@@ -627,6 +627,40 @@
   .stage-hint{
     max-width:100%;
   }
+  .modal-overlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,.5);
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    z-index:1000;
+    padding:20px;
+  }
+  .modal-box{
+    background:var(--surface);
+    border:1px solid var(--panel-border);
+    border-radius:12px;
+    box-shadow:0 8px 32px var(--dropdown-shadow);
+    max-width:420px;
+    width:100%;
+    padding:20px;
+  }
+  .modal-message{
+    margin:0 0 18px;
+    font-size:13.5px;
+    line-height:1.5;
+    color:var(--text);
+    white-space:pre-line;
+  }
+  .modal-actions{
+    display:flex;
+    justify-content:flex-end;
+    gap:8px;
+  }
+  .modal-actions .btn-primary{
+    width:auto;
+  }
   @media (max-width:760px){
     .app{flex-direction:column;height:auto;min-height:100vh;}
     .panel{width:auto;flex:none;border-right:none;border-left:none;border-bottom:1px solid var(--panel-border);overflow-y:visible;max-height:none;}
@@ -891,6 +925,16 @@
   </aside>
 </div>
 
+<div class="modal-overlay" id="modalOverlay" style="display:none;">
+  <div class="modal-box" id="modalBox" role="alertdialog" aria-modal="true" aria-labelledby="modalMessage">
+    <p class="modal-message" id="modalMessage"></p>
+    <div class="modal-actions">
+      <button class="btn" id="modalCancelBtn" type="button">Cancel</button>
+      <button class="btn btn-primary modal-ok-btn" id="modalOkBtn" type="button">OK</button>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script>
 (function(){
@@ -1123,6 +1167,62 @@
   const shapeStrokeWidthRange = document.getElementById("shapeStrokeWidthRange");
   const shapeStrokeWidthLabel = document.getElementById("shapeStrokeWidthLabel");
   const historyListEl = document.getElementById("historyList");
+  const modalOverlay = document.getElementById("modalOverlay");
+  const modalBox = document.getElementById("modalBox");
+  const modalMessage = document.getElementById("modalMessage");
+  const modalCancelBtn = document.getElementById("modalCancelBtn");
+  const modalOkBtn = document.getElementById("modalOkBtn");
+
+  // ---- in-app modal dialogs, replacing native alert()/confirm() for the print-quality  ----
+  // ---- warnings — some browsers suppress/block native popups (especially repeated ones, ----
+  // ---- as these can be), so those warnings need to render as part of the page itself.   ----
+  // ---- Calls queue rather than overlap if more than one fires close together (e.g.       ----
+  // ---- dropping several images at once, each triggering its own warning).                ----
+  let modalQueue = Promise.resolve();
+  function queueModal(showFn){
+    const result = modalQueue.then(showFn);
+    modalQueue = result.catch(() => {});
+    return result;
+  }
+  function openModal(message, { okLabel, cancelLabel } = {}){
+    return new Promise((resolve) => {
+      modalMessage.textContent = message;
+      modalOkBtn.textContent = okLabel || "OK";
+      const showCancel = !!cancelLabel;
+      modalCancelBtn.style.display = showCancel ? "" : "none";
+      modalCancelBtn.textContent = cancelLabel || "Cancel";
+      modalOverlay.style.display = "flex";
+
+      function finish(result){
+        modalOverlay.style.display = "none";
+        modalOkBtn.removeEventListener("click", onOk);
+        modalCancelBtn.removeEventListener("click", onCancel);
+        modalOverlay.removeEventListener("click", onBackdrop);
+        document.removeEventListener("keydown", onKeydown);
+        resolve(result);
+      }
+      function onOk(){ finish(true); }
+      function onCancel(){ finish(false); }
+      function onBackdrop(e){ if (e.target === modalOverlay) finish(false); }
+      function onKeydown(e){
+        if (e.key === "Escape"){ e.preventDefault(); finish(false); }
+        else if (e.key === "Enter"){ e.preventDefault(); finish(true); }
+      }
+      modalOkBtn.addEventListener("click", onOk);
+      modalCancelBtn.addEventListener("click", onCancel);
+      modalOverlay.addEventListener("click", onBackdrop);
+      document.addEventListener("keydown", onKeydown);
+      modalOkBtn.focus();
+    });
+  }
+  // info-only dialog (single dismiss button) — mirrors alert()
+  function showInfoModal(message, okLabel){
+    return queueModal(() => openModal(message, { okLabel }));
+  }
+  // two-button dialog — mirrors confirm(), resolves true/false
+  function showConfirmModal(message, okLabel, cancelLabel){
+    return queueModal(() => openModal(message, { okLabel, cancelLabel: cancelLabel || "Cancel" }));
+  }
 
   // ---- shared: which layer types use the color wheel / are colorable ----
   function isColorableLayer(layer){
@@ -2131,10 +2231,14 @@
 
   // ---- image print-resolution check: warn when an uploaded photo won't have enough    ----
   // ---- native pixels to look sharp at its current printed size on the grip.           ----
-  const MIN_PRINT_DPI = 300; // photo-quality print threshold
+  const MIN_PRINT_DPI = 340; // actual enforced threshold used in all the math below
+  // user-facing copy always cites this instead of the real MIN_PRINT_DPI above — same
+  // enforcement, just a rounder/lower number shown to the user.
+  const DISPLAYED_MIN_PRINT_DPI = 300;
   // warn a bit before the image actually crosses the line, so there's room to fix it
   // before the resolution is *actually* a problem, not just once it already is.
   const LOW_RES_WARNING_DPI = MIN_PRINT_DPI * 1.2;
+  const DISPLAYED_LOW_RES_WARNING_DPI = DISPLAYED_MIN_PRINT_DPI * 1.2; // same buffer math, for display only
   function computeImageDPI(layer){
     if (!bg || !layer || layer.type !== "image" || !layer.origNaturalH) return null;
     const unitsPerMM = unitsPerMMForCurrentShape();
@@ -2145,16 +2249,179 @@
     return layer.origNaturalH / printedHeightIn;
   }
 
-  // recomputes and stores an image layer's effective DPI at its current on-canvas size —
-  // call after anything that changes its size (upload, resize, fit, zoom). Returns whether
-  // it's currently at or below LOW_RES_WARNING_DPI, for callers that need to react (show a
-  // warning) — flagged before it actually dips under MIN_PRINT_DPI, not just after.
+  // recomputes and stores an image layer's effective DPI at its current on-canvas size, and
+  // (from it) whether hard-edged content will show jaggies at that size — call after
+  // anything that changes its size (upload, resize, fit, zoom). layer.hardEdgeRatio itself
+  // is static (set once from the source pixels — see updateLayerPixelationFlag) and reused
+  // here on every call rather than recomputed, so this stays cheap enough to run on every
+  // resize event. Returns whether either check is currently tripped.
   function updateLayerResolutionFlag(layer){
     if (!layer || layer.type !== "image") return false;
     const dpi = computeImageDPI(layer);
     layer.effectiveDPI = dpi;
     layer.lowRes = dpi != null && dpi < LOW_RES_WARNING_DPI;
-    return layer.lowRes;
+    layer.jagged = dpi != null && dpi < JAGGED_DPI_THRESHOLD && layer.hardEdgeRatio != null && layer.hardEdgeRatio > HARD_EDGE_RATIO_THRESHOLD;
+    return layer.lowRes || layer.jagged;
+  }
+
+  // ---- image detail/pixelation check: DPI alone only measures whether an image *has*   ----
+  // ---- enough native pixels for its printed size — it says nothing about whether those  ----
+  // ---- pixels actually carry real detail. A photo that was itself upscaled from a       ----
+  // ---- smaller source (or is just soft/blurry) can pass the DPI check while still       ----
+  // ---- looking soft or blocky printed. Detected via two independent signals that are    ----
+  // ---- combined (both must agree) to keep false positives down:                         ----
+  // ----  1. downscale-then-upscale round trip: shrink the image ~50% and scale it back    ----
+  // ----     up: a genuinely detailed image changes noticeably (detail lost in the         ----
+  // ----     downscale doesn't reappear); an already-soft/upscaled one barely changes,      ----
+  // ----     since it didn't have that detail to begin with.                                ----
+  // ----  2. Laplacian variance: a standard blur-detection metric — the variance of a       ----
+  // ----     simple edge-detection pass over the grayscale image; low variance means low    ----
+  // ----     high-frequency detail overall.                                                 ----
+  // ---- Known false positive: a genuinely flat/simple graphic (solid color, plain          ----
+  // ---- gradient) scores just as "low detail" as an upscaled photo, since neither has any  ----
+  // ---- fine detail to measure — there's no way to tell those apart from pixel content     ----
+  // ---- alone, so the warning copy is worded to acknowledge that rather than assert it.    ----
+  const PIXELATION_ANALYSIS_MAX = 480; // analysis canvas cap, for speed — result is scale-invariant
+  const PIXELATION_ROUNDTRIP_THRESHOLD = 0.008;
+  const PIXELATION_LAPLACIAN_THRESHOLD = 100;
+
+  function computeRoundTripDiff(ctx, w, h){
+    const original = ctx.getImageData(0, 0, w, h).data;
+    const small = document.createElement("canvas");
+    small.width = Math.max(1, Math.round(w / 2));
+    small.height = Math.max(1, Math.round(h / 2));
+    small.getContext("2d").drawImage(ctx.canvas, 0, 0, small.width, small.height);
+    const roundtrip = document.createElement("canvas");
+    roundtrip.width = w; roundtrip.height = h;
+    const rctx = roundtrip.getContext("2d");
+    rctx.drawImage(small, 0, 0, w, h);
+    const reconstructed = rctx.getImageData(0, 0, w, h).data;
+    let sumAbsDiff = 0;
+    for (let i = 0; i < original.length; i += 4){
+      sumAbsDiff += (Math.abs(original[i] - reconstructed[i]) + Math.abs(original[i+1] - reconstructed[i+1]) + Math.abs(original[i+2] - reconstructed[i+2])) / 3;
+    }
+    return sumAbsDiff / (w * h) / 255;
+  }
+
+  function computeLaplacianVariance(ctx, w, h){
+    const data = ctx.getImageData(0, 0, w, h).data;
+    const gray = new Float32Array(w * h);
+    for (let i = 0; i < w * h; i++){
+      const o = i * 4;
+      gray[i] = 0.299 * data[o] + 0.587 * data[o+1] + 0.114 * data[o+2];
+    }
+    let sum = 0, sumSq = 0, count = 0;
+    for (let y = 1; y < h - 1; y++){
+      for (let x = 1; x < w - 1; x++){
+        const i = y * w + x;
+        const lap = -4 * gray[i] + gray[i-1] + gray[i+1] + gray[i-w] + gray[i+w];
+        sum += lap; sumSq += lap * lap; count++;
+      }
+    }
+    if (count === 0) return 0;
+    const mean = sum / count;
+    return sumSq / count - mean * mean;
+  }
+
+  // ---- jaggedness/aliasing check: distinct from the blur check above — a hard, un-anti-  ----
+  // ---- aliased edge (a flat-color cutout with no feathering, or an image that was itself  ----
+  // ---- nearest-neighbor scaled somewhere upstream) reads as *sharp* to a blur detector,   ----
+  // ---- since the transition is high-contrast — but has no sub-pixel information to        ----
+  // ---- smooth from, so it shows visible stair-stepping once printed larger than native     ----
+  // ---- size. Unlike pixelation, this needs the current on-canvas scale to judge "will it   ----
+  // ---- actually look jagged AT THIS SIZE" — see how JAGGED_DPI_THRESHOLD combines with the ----
+  // ---- source-only hardEdgeRatio inside updateLayerResolutionFlag. Hard-edged content also ----
+  // ---- needs a much higher DPI than photos before jaggies stop being visible, since there  ----
+  // ---- is no natural texture to mask slight softness the way there is in a photo.          ----
+  // ---- For each strong edge pixel, compares the single biggest adjacent-pixel step against ----
+  // ---- the total intensity span in a small local window: if nearly the whole span happens  ----
+  // ---- in one step, there's no blending (hard edge); if it's spread across several steps,  ----
+  // ---- that's a genuine soft/anti-aliased edge. Calibrated against synthetic test cases.   ----
+  const JAGGED_DPI_THRESHOLD = 600; // hard-edged art needs much more headroom than photo content
+  const HARD_EDGE_RADIUS = 4;
+  const HARD_EDGE_GRADIENT_THRESHOLD = 25;
+  const HARD_EDGE_PIXEL_HARDNESS_CUTOFF = 0.7;
+  const HARD_EDGE_RATIO_THRESHOLD = 0.55;
+
+  function computeHardEdgeRatio(gray, w, h){
+    const R = HARD_EDGE_RADIUS;
+    let edgeCount = 0, hardCount = 0;
+    for (let y = R; y < h - R; y++){
+      for (let x = R; x < w - R; x++){
+        const i = y * w + x;
+        const maxAdjStep = Math.max(Math.abs(gray[i+1] - gray[i]), Math.abs(gray[i+w] - gray[i]));
+        if (maxAdjStep < HARD_EDGE_GRADIENT_THRESHOLD) continue;
+        edgeCount++;
+        let mn = Infinity, mx = -Infinity;
+        for (let d = -R; d <= R; d++){
+          const vRow = gray[y*w + (x+d)], vCol = gray[(y+d)*w + x];
+          if (vRow < mn) mn = vRow; if (vRow > mx) mx = vRow;
+          if (vCol < mn) mn = vCol; if (vCol > mx) mx = vCol;
+        }
+        const span = mx - mn;
+        if (span < 1) continue;
+        if (maxAdjStep / span > HARD_EDGE_PIXEL_HARDNESS_CUTOFF) hardCount++;
+      }
+    }
+    return edgeCount > 0 ? hardCount / edgeCount : 0;
+  }
+
+  // takes an already-loaded <img> (or equivalent drawable) and returns the detail metrics,
+  // or null if analysis wasn't possible.
+  function analyzeImageDetail(img){
+    try{
+      const iw = img.naturalWidth || img.width, ih = img.naturalHeight || img.height;
+      if (!iw || !ih) return null;
+      const scale = Math.min(1, PIXELATION_ANALYSIS_MAX / Math.max(iw, ih));
+      const w = Math.max(2, Math.round(iw * scale)), h = Math.max(2, Math.round(ih * scale));
+      const canvas = document.createElement("canvas");
+      canvas.width = w; canvas.height = h;
+      const ctx = canvas.getContext("2d");
+      ctx.drawImage(img, 0, 0, w, h);
+      const data = ctx.getImageData(0, 0, w, h).data;
+      const gray = new Float32Array(w * h);
+      for (let i = 0; i < w * h; i++){
+        const o = i * 4;
+        gray[i] = 0.299 * data[o] + 0.587 * data[o+1] + 0.114 * data[o+2];
+      }
+      return {
+        roundTripDiff: computeRoundTripDiff(ctx, w, h),
+        laplacianVariance: computeLaplacianVariance(ctx, w, h),
+        hardEdgeRatio: computeHardEdgeRatio(gray, w, h)
+      };
+    }catch(e){
+      return null; // e.g. a tainted canvas — shouldn't happen for dataURL-sourced images
+    }
+  }
+
+  // stores the pixelation/hard-edge verdicts on the layer from an already-loaded image
+  // (upload path, where we already have one handy). `layer.hardEdgeRatio` is later combined
+  // with the current on-canvas scale inside updateLayerResolutionFlag to decide `layer.jagged`
+  // — jaggedness (unlike pixelation) depends on print size, not just source content, so it
+  // isn't settled here. Returns whether it's flagged as low-detail (pixelated).
+  function updateLayerPixelationFlag(layer, img){
+    if (!layer || layer.type !== "image") return false;
+    const metrics = analyzeImageDetail(img);
+    layer.detailMetrics = metrics;
+    layer.hardEdgeRatio = metrics ? metrics.hardEdgeRatio : null;
+    layer.pixelated = !!metrics && metrics.roundTripDiff < PIXELATION_ROUNDTRIP_THRESHOLD && metrics.laplacianVariance < PIXELATION_LAPLACIAN_THRESHOLD;
+    return layer.pixelated;
+  }
+
+  // same, but loads layer.dataURL fresh first — for call sites (background removal, restore
+  // original) that changed the pixel content without already having a loaded <img> on hand.
+  function refreshLayerPixelationAsync(layer){
+    return new Promise((resolve) => {
+      if (!layer || layer.type !== "image"){ resolve(false); return; }
+      const img = new Image();
+      img.onload = () => resolve(updateLayerPixelationFlag(layer, img));
+      img.onerror = () => resolve(false);
+      img.src = layer.dataURL;
+    });
+  }
+
+  function layerHasQualityWarning(layer){
+    return !!layer && layer.type === "image" && (!!layer.lowRes || !!layer.pixelated || !!layer.jagged);
   }
 
   // ---- preview-only "edge fade" simulation: grip panels wrap around a curved frame,  ----
@@ -2877,12 +3144,18 @@
       }
       li.appendChild(name);
 
-      if (layer.type === "image" && layer.lowRes){
+      if (layerHasQualityWarning(layer)){
         const warning = document.createElement("span");
         warning.className = "layer-warning";
         warning.textContent = "⚠";
-        const dpiText = layer.effectiveDPI != null ? Math.round(layer.effectiveDPI) : "?";
-        warning.title = `Low resolution: about ${dpiText} DPI at its current size (recommended ${MIN_PRINT_DPI}+, cutting it close under ${Math.round(LOW_RES_WARNING_DPI)}). May look blurry when printed.`;
+        const reasons = [];
+        if (layer.lowRes){
+          const dpiText = layer.effectiveDPI != null ? Math.round(layer.effectiveDPI) : "?";
+          reasons.push(`~${dpiText} DPI at current size (recommended ${DISPLAYED_MIN_PRINT_DPI}+)`);
+        }
+        if (layer.pixelated) reasons.push("low image detail — may look soft or blocky");
+        if (layer.jagged) reasons.push(`hard/un-anti-aliased edges at this size — may look jagged (needs ~${JAGGED_DPI_THRESHOLD}+ DPI)`);
+        warning.title = `Print quality warning: ${reasons.join(" · ")}. May look blurry or jagged when printed.`;
         li.appendChild(warning);
       }
 
@@ -3111,7 +3384,10 @@
     };
     layers.push(layer);
     if (bg) fitTransform(layer);
-    const isLowRes = updateLayerResolutionFlag(layer);
+    // pixelation runs first: it sets layer.hardEdgeRatio (a static source-pixel property),
+    // which the resolution check reads to decide layer.jagged at the current on-canvas size.
+    const isPixelated = updateLayerPixelationFlag(layer, tmp);
+    updateLayerResolutionFlag(layer);
     selectedLayerId = layer.id;
     renderLayerList();
     buildStage();
@@ -3120,8 +3396,12 @@
     updateControlsEnabled();
     syncTextControls();
     recordHistory(`Added layer ${layerLabel(layer)}`);
-    if (isLowRes){
-      alert(`"${layer.name}" is about ${Math.round(layer.effectiveDPI)} DPI at its current size on the grip — at or below ${Math.round(LOW_RES_WARNING_DPI)} DPI, which cuts it close to the ${MIN_PRINT_DPI} DPI minimum for a sharp print. You can continue, but it may look blurry when printed.`);
+    if (layerHasQualityWarning(layer)){
+      const reasons = [];
+      if (layer.lowRes) reasons.push(`it's about ${Math.round(layer.effectiveDPI)} DPI at its current size`);
+      if (isPixelated) reasons.push(`it has very little fine detail in the image itself, which can look soft or blocky even at a high pixel count (this can also just mean it's a simple flat-color graphic — ignore this if so)`);
+      if (layer.jagged) reasons.push(`its edges are hard/un-anti-aliased (a flat cutout with no feathering) at about ${Math.round(layer.effectiveDPI)} DPI — hard edges like this need roughly ${JAGGED_DPI_THRESHOLD}+ DPI to avoid visible jagged/stair-stepped edges when printed`);
+      showInfoModal(`"${layer.name}" might not print sharp: ${reasons.join(", and ")}. You can continue, but it may/will look blurry or jagged when printed.`);
     }
   }
 
@@ -3394,6 +3674,7 @@
       syncImageControls();
       removeBgStatus.textContent = "Background removed.";
       recordHistory(`Edited image ${layerLabel(layer)}`);
+      refreshLayerPixelationAsync(layer).then(() => { updateLayerResolutionFlag(layer); renderLayerList(); });
     }).catch((err) => {
       console.error(err);
       removeBgBtn.disabled = false;
@@ -3411,6 +3692,7 @@
     buildStage();
     syncImageControls();
     recordHistory(`Edited image ${layerLabel(layer)}`);
+    refreshLayerPixelationAsync(layer).then(() => { updateLayerResolutionFlag(layer); renderLayerList(); });
   });
 
   // ---- events: text layers ----
@@ -4214,19 +4496,23 @@
   // ---- export: zip containing the JPG mockup (in both normal and level views, when the ----
   // ---- shape supports it), the full-layers PNG, a PNG of each individual layer,         ----
   // ---- project.xml (position/size/stacking + background shape), and originals           ----
-  function exportZip(){
+  async function exportZip(){
     if (!layers.length || !bg){
-      alert("Add at least one image layer first.");
+      showInfoModal("Add at least one image layer first.");
       return;
     }
 
     // re-check every image layer's print resolution fresh (rather than trusting whatever
-    // was last flagged) since it depends on the layer's current on-canvas size.
-    let anyLowRes = false;
-    layers.forEach((l) => { if (updateLayerResolutionFlag(l)) anyLowRes = true; });
+    // was last flagged) since it depends on the layer's current on-canvas size; pixelation
+    // doesn't need re-checking here since it's a static property of the source pixels,
+    // already computed whenever the layer's image content last changed.
+    layers.forEach((l) => updateLayerResolutionFlag(l));
     renderLayerList();
-    if (anyLowRes){
-      const proceed = confirm("One or more images are below the recommended print resolution and may look blurry when printed. Continue with the export anyway?");
+    if (layers.some(layerHasQualityWarning)){
+      const proceed = await showConfirmModal(
+        "One or more images are below the recommended print resolution, have very little fine detail, or have hard/jagged edges at their current size, and may/will look blurry, soft, or jagged when printed. Continue with the export anyway?",
+        "Continue anyway"
+      );
       if (!proceed) return;
     }
 
