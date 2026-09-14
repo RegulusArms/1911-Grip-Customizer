@@ -576,6 +576,7 @@
     display:block;
     width:100%;
     height:100%;
+    overflow:visible;
   }
   .handle-layer{
     position:absolute;
@@ -2925,12 +2926,17 @@
     return null;
   }
 
-  // attached once to #stage (which persists across buildStage() rebuilds, unlike its
-  // children) — clicking any layer's visible area selects it (topmost wins on overlap)
-  // and immediately starts dragging it, same as the old per-selected-layer guide rect did.
+  // attached to stageContainer rather than #stage itself: #stage's own CSS box is only
+  // ever as tall as its fitted viewBox content (no vertical letterboxing slack, since a
+  // tall/narrow grip in a roughly-square container is always height-constrained), so a
+  // layer dragged/scaled past the background shape's own top/bottom edge paints fine
+  // (overflow:visible) but sits outside #stage's hit-testable box — clicks there would
+  // never reach a listener on #stage. stageContainer's plain DIV box always covers the
+  // full visible workspace, so it catches those clicks too; stagePointFromEvent() only
+  // needs clientX/clientY, so the coordinate math is unaffected by the listener's target.
   function attachStageSelectAndDrag(){
-    stage.addEventListener("pointerdown", (e) => {
-      if (e.button !== 0 || !bg) return;
+    stageContainer.addEventListener("pointerdown", (e) => {
+      if (e.button !== 0 || !bg || colorSamplingActive) return;
       const stagePt = stagePointFromEvent(e);
       const hit = hitTestLayerAt(stagePt);
       if (!hit) return;
