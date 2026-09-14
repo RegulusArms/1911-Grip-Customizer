@@ -462,6 +462,13 @@
     text-overflow:ellipsis;
     white-space:nowrap;
   }
+  .layer-warning{
+    flex:0 0 auto;
+    color:#e0a800;
+    font-size:13px;
+    line-height:1;
+    cursor:help;
+  }
   .layer-remove{
     flex:0 0 auto;
     border:none;
@@ -2113,6 +2120,43 @@
     layer.xform = { cx: cbb.x + cbb.w/2, cy: cbb.y + cbb.h/2, scale: fitScale, rot: 0 };
   }
 
+  // prefer the selected panel's own measured length; fall back to a generic ~5in grip
+  // assumption for shapes we don't have a real measurement for (see BUILTIN_SHAPES).
+  function unitsPerMMForCurrentShape(){
+    if (!bg) return null;
+    const shapeDef = BUILTIN_SHAPES[shapeSelect.value];
+    const refMM = (shapeDef && shapeDef.refLengthMM) || 127;
+    return bg.clipBBoxRect.h / refMM;
+  }
+
+  // ---- image print-resolution check: warn when an uploaded photo won't have enough    ----
+  // ---- native pixels to look sharp at its current printed size on the grip.           ----
+  const MIN_PRINT_DPI = 300; // photo-quality print threshold
+  // warn a bit before the image actually crosses the line, so there's room to fix it
+  // before the resolution is *actually* a problem, not just once it already is.
+  const LOW_RES_WARNING_DPI = MIN_PRINT_DPI * 1.2;
+  function computeImageDPI(layer){
+    if (!bg || !layer || layer.type !== "image" || !layer.origNaturalH) return null;
+    const unitsPerMM = unitsPerMMForCurrentShape();
+    if (!unitsPerMM) return null;
+    // based on each layer's own printed height (not width) against its native pixel height
+    const printedHeightIn = (layer.naturalH * layer.xform.scale) / unitsPerMM / 25.4;
+    if (printedHeightIn <= 0) return null;
+    return layer.origNaturalH / printedHeightIn;
+  }
+
+  // recomputes and stores an image layer's effective DPI at its current on-canvas size —
+  // call after anything that changes its size (upload, resize, fit, zoom). Returns whether
+  // it's currently at or below LOW_RES_WARNING_DPI, for callers that need to react (show a
+  // warning) — flagged before it actually dips under MIN_PRINT_DPI, not just after.
+  function updateLayerResolutionFlag(layer){
+    if (!layer || layer.type !== "image") return false;
+    const dpi = computeImageDPI(layer);
+    layer.effectiveDPI = dpi;
+    layer.lowRes = dpi != null && dpi < LOW_RES_WARNING_DPI;
+    return layer.lowRes;
+  }
+
   // ---- preview-only "edge fade" simulation: grip panels wrap around a curved frame,  ----
   // ---- so the outer ~2-3mm of the edges print with reduced ink density and slight    ----
   // ---- warping. This is a live-preview effect only (an SVG filter applied to the     ----
@@ -2200,12 +2244,7 @@
   function appendEdgeFadeDefs(defs, bg){
     const cbb = bg.clipBBoxRect;
     const FADE_MM = 4.5;
-    // prefer the selected panel's own measured length; fall back to a generic ~5in grip
-    // assumption for shapes we don't have a real measurement for.
-    const shapeDef = BUILTIN_SHAPES[shapeSelect.value];
-    const REF_GRIP_LENGTH_MM = (shapeDef && shapeDef.refLengthMM) || 127;
-    const scaleUnitsPerMM = cbb.h / REF_GRIP_LENGTH_MM;
-    let fadeUnits = scaleUnitsPerMM * FADE_MM;
+    let fadeUnits = unitsPerMMForCurrentShape() * FADE_MM;
     fadeUnits = Math.min(fadeUnits, cbb.w * 0.35);
 
     // region generously covers the outline plus room for the warp filter's overshoot
@@ -2676,6 +2715,7 @@
       function up(){
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", up);
+        if (selected.type === "image"){ updateLayerResolutionFlag(selected); renderLayerList(); }
         commitHistoryChange(() => `Resized layer ${layerLabel(selected)}`);
       }
       window.addEventListener("pointermove", move);
@@ -2720,6 +2760,7 @@
       function up(){
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", up);
+        if (selected.type === "image"){ updateLayerResolutionFlag(selected); renderLayerList(); }
         commitHistoryChange(() => `Resized layer ${layerLabel(selected)}`);
       }
       window.addEventListener("pointermove", move);
@@ -2835,6 +2876,15 @@
         name.textContent = layer.name;
       }
       li.appendChild(name);
+
+      if (layer.type === "image" && layer.lowRes){
+        const warning = document.createElement("span");
+        warning.className = "layer-warning";
+        warning.textContent = "⚠";
+        const dpiText = layer.effectiveDPI != null ? Math.round(layer.effectiveDPI) : "?";
+        warning.title = `Low resolution: about ${dpiText} DPI at its current size (recommended ${MIN_PRINT_DPI}+, cutting it close under ${Math.round(LOW_RES_WARNING_DPI)}). May look blurry when printed.`;
+        li.appendChild(warning);
+      }
 
       const removeBtn = document.createElement("button");
       removeBtn.type = "button";
@@ -3061,6 +3111,7 @@
     };
     layers.push(layer);
     if (bg) fitTransform(layer);
+    const isLowRes = updateLayerResolutionFlag(layer);
     selectedLayerId = layer.id;
     renderLayerList();
     buildStage();
@@ -3069,6 +3120,9 @@
     updateControlsEnabled();
     syncTextControls();
     recordHistory(`Added layer ${layerLabel(layer)}`);
+    if (isLowRes){
+      alert(`"${layer.name}" is about ${Math.round(layer.effectiveDPI)} DPI at its current size on the grip — at or below ${Math.round(LOW_RES_WARNING_DPI)} DPI, which cuts it close to the ${MIN_PRINT_DPI} DPI minimum for a sharp print. You can continue, but it may look blurry when printed.`);
+    }
   }
 
   // Some CMYK/YCCK-color JPEGs (common in print-ready art exported from
@@ -3304,6 +3358,8 @@
     layer.naturalW = layer.origNaturalW;
     layer.naturalH = layer.origNaturalH;
     buildStage();
+    updateLayerResolutionFlag(layer);
+    renderLayerList();
     recordHistory(`Resized layer ${layerLabel(layer)}`);
   });
 
@@ -3550,6 +3606,9 @@
     currentShapeLabel = shape.label;
     updatePreviewFadeUI();
     parseAndLoadBackground(shape.svg);
+    // the panel's physical size (and so each image's effective print DPI) just changed
+    layers.forEach((l) => updateLayerResolutionFlag(l));
+    renderLayerList();
     if (historyIndex === 0) updateStartEntry();
     else recordHistory(`Changed grip panel to ${shape.label}`);
   });
@@ -3580,6 +3639,7 @@
     updateSelectedLayerTransform();
     syncZoomSlider();
     syncRotationSlider();
+    if (selected.type === "image"){ updateLayerResolutionFlag(selected); renderLayerList(); }
     recordHistory(`Resized layer ${layerLabel(selected)}`);
   });
 
@@ -3598,6 +3658,8 @@
     updateSelectedLayerTransform();
   });
   zoomRange.addEventListener("change", () => {
+    const selected = getSelectedLayer();
+    if (selected && selected.type === "image"){ updateLayerResolutionFlag(selected); renderLayerList(); }
     commitHistoryChange(() => `Resized layer ${layerLabel(getSelectedLayer())}`);
   });
 
@@ -4157,6 +4219,17 @@
       alert("Add at least one image layer first.");
       return;
     }
+
+    // re-check every image layer's print resolution fresh (rather than trusting whatever
+    // was last flagged) since it depends on the layer's current on-canvas size.
+    let anyLowRes = false;
+    layers.forEach((l) => { if (updateLayerResolutionFlag(l)) anyLowRes = true; });
+    renderLayerList();
+    if (anyLowRes){
+      const proceed = confirm("One or more images are below the recommended print resolution and may look blurry when printed. Continue with the export anyway?");
+      if (!proceed) return;
+    }
+
     downloadZipBtn.disabled = true;
     downloadZipBtn.textContent = "Preparing…";
     saveZipMenuBtn.disabled = true;
@@ -4403,6 +4476,7 @@
       return l;
     });
     selectedLayerId = layers.length ? layers[layers.length - 1].id : null;
+    layers.forEach((l) => updateLayerResolutionFlag(l));
 
     renderLayerList();
     buildStage();
