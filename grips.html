@@ -166,6 +166,24 @@
     width:17px;
     height:17px;
   }
+  .home-link-btn{
+    margin-left:auto;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:30px;
+    height:30px;
+    padding:0;
+    color:var(--muted);
+    text-decoration:none;
+  }
+  .home-link-btn svg{
+    width:17px;
+    height:17px;
+  }
+  .home-link-btn + .theme-toggle-btn{
+    margin-left:2px;
+  }
   .menu-dropdown{
     display:none;
     position:absolute;
@@ -695,6 +713,11 @@
     </div>
   </div>
   <button type="button" class="menu-btn" id="saveZipMenuBtn" disabled>Save</button>
+  <a href="./index.html" class="menu-btn home-link-btn" title="Back to all projects" aria-label="Back to all projects">
+    <svg viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M3.5,11.5,12,4l8.5,7.5 M6,10v9.5h4.5v-6h3v6h4.5V10"></path>
+    </svg>
+  </a>
   <button type="button" class="menu-btn theme-toggle-btn" id="themeToggleBtn" title="Switch to light theme" aria-label="Switch to light theme">
     <svg id="themeIconMoon" viewBox="0 0 24 24" aria-hidden="true">
       <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20.5,14.2A8.5,8.5,0,1,1,9.8,3.5,7,7,0,0,0,20.5,14.2Z"></path>
@@ -4954,6 +4977,32 @@
   updateControlsEnabled();
   syncTextControls();
   resetHistoryForFreshLoad("Start");
+
+  // ---- pick up a project file handed off from the landing page, if any ----
+  function openHandoffDB(){
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open("customizerHandoff", 1);
+      req.onupgradeneeded = () => { req.result.createObjectStore("files"); };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  function takePendingProjectFile(){
+    return openHandoffDB().then((db) => new Promise((resolve, reject) => {
+      const tx = db.transaction("files", "readwrite");
+      const store = tx.objectStore("files");
+      const getReq = store.get("pending");
+      getReq.onsuccess = () => {
+        const file = getReq.result;
+        store.delete("pending");
+        tx.oncomplete = () => resolve(file || null);
+      };
+      getReq.onerror = () => reject(getReq.error);
+    }));
+  }
+  takePendingProjectFile().then((file) => {
+    if (file) importProjectZip(file);
+  }).catch((err) => console.error(err));
 })();
 </script>
 </body>

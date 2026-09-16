@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Regulus Arms Customizer</title>
+<script>
+  // set the theme before first paint so there's no flash of the wrong palette
+  (function(){
+    var theme = "dark";
+    try{
+      var saved = localStorage.getItem("landingCustomizerTheme");
+      if (saved === "light" || saved === "dark") theme = saved;
+    }catch(e){ /* ignore */ }
+    document.documentElement.setAttribute("data-theme", theme);
+  })();
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Roboto&family=Montserrat&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --panel-bg:#ffffff;
+    --panel-border:#e2e2e7;
+    --accent:#3b82f6;
+    --text:#1f2430;
+    --muted:#6b7280;
+    --bg:#f4f5f7;
+    --surface:#ffffff;
+    --hover-bg:#f2f3f5;
+    --accent-tint:#eaf1fe;
+    --dropzone-hover-bg:#f7f9fc;
+    --dropzone-hover-border:#c7cbd4;
+    --dropdown-shadow:rgba(0,0,0,.14);
+    --stage-shadow-1:rgba(0,0,0,.12);
+    --stage-shadow-2:rgba(0,0,0,.08);
+    --danger:#c0392b;
+    --stage-bg:#ffffff;
+    --stage-checker:#e6e6ea;
+  }
+  html[data-theme="dark"]{
+    --panel-bg:#1c1f26;
+    --panel-border:#33363f;
+    --accent:#5b9dff;
+    --text:#e7e9ee;
+    --muted:#9aa0ac;
+    --bg:#111318;
+    --surface:#20232b;
+    --hover-bg:#2a2d36;
+    --accent-tint:#1d2c46;
+    --dropzone-hover-bg:#262a33;
+    --dropzone-hover-border:#454a56;
+    --dropdown-shadow:rgba(0,0,0,.5);
+    --stage-shadow-1:rgba(0,0,0,.4);
+    --stage-shadow-2:rgba(0,0,0,.3);
+    --danger:#e0685a;
+    --stage-bg:#2b2e35;
+    --stage-checker:#363a43;
+  }
+  *{box-sizing:border-box;}
+  html,body{
+    margin:0;
+    min-height:100%;
+    background:var(--bg);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    color:var(--text);
+  }
+  body{
+    display:flex;
+    flex-direction:column;
+    min-height:100vh;
+  }
+  .menubar{
+    flex:0 0 auto;
+    display:flex;
+    align-items:center;
+    height:36px;
+    background:var(--panel-bg);
+    border-bottom:1px solid var(--panel-border);
+    padding:0 6px;
+    font-size:13px;
+    user-select:none;
+  }
+  .brand{
+    padding:6px 10px;
+    font-weight:600;
+    color:var(--text);
+  }
+  .theme-toggle-btn{
+    margin-left:auto;
+    display:inline-flex;
+    align-items:center;
+    justify-content:center;
+    width:30px;
+    height:30px;
+    padding:0;
+    border:none;
+    border-radius:6px;
+    background:transparent;
+    color:var(--muted);
+    cursor:pointer;
+  }
+  .theme-toggle-btn:hover{
+    background:var(--hover-bg);
+  }
+  .theme-toggle-btn svg{
+    width:17px;
+    height:17px;
+  }
+  main{
+    flex:1 1 auto;
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    padding:48px 20px 32px;
+  }
+  .hero{
+    max-width:720px;
+    text-align:center;
+    margin-bottom:40px;
+  }
+  .hero h1{
+    font-size:30px;
+    margin:0 0 10px;
+    font-weight:700;
+  }
+  .hero p{
+    font-size:14.5px;
+    color:var(--muted);
+    margin:0;
+    line-height:1.6;
+  }
+  .cards{
+    display:flex;
+    flex-wrap:wrap;
+    gap:24px;
+    justify-content:center;
+    width:100%;
+    max-width:920px;
+    margin-bottom:44px;
+  }
+  .card{
+    display:block;
+    width:320px;
+    background:var(--panel-bg);
+    border:1px solid var(--panel-border);
+    border-radius:14px;
+    overflow:hidden;
+    text-decoration:none;
+    color:inherit;
+    box-shadow:0 1px 3px var(--stage-shadow-1);
+    transition:transform .12s ease, box-shadow .12s ease, border-color .12s ease;
+  }
+  .card:hover{
+    transform:translateY(-3px);
+    box-shadow:0 10px 28px var(--stage-shadow-2);
+    border-color:var(--accent);
+  }
+  .card-preview{
+    height:220px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:18px;
+    background-image:
+      linear-gradient(45deg, var(--stage-checker) 25%, transparent 25%),
+      linear-gradient(-45deg, var(--stage-checker) 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, var(--stage-checker) 75%),
+      linear-gradient(-45deg, transparent 75%, var(--stage-checker) 75%);
+    background-size:18px 18px;
+    background-position:0 0, 0 9px, 9px -9px, -9px 0px;
+    background-color:var(--stage-bg);
+  }
+  .card-preview svg{
+    height:100%;
+    width:auto;
+    filter:drop-shadow(0 3px 8px var(--stage-shadow-1));
+  }
+  .card-body{
+    padding:16px 18px 20px;
+    border-top:1px solid var(--panel-border);
+  }
+  .card-body h2{
+    font-size:16.5px;
+    margin:0 0 6px;
+  }
+  .card-body p{
+    font-size:13px;
+    color:var(--muted);
+    margin:0 0 12px;
+    line-height:1.5;
+  }
+  .card-cta{
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+    font-size:13px;
+    font-weight:600;
+    color:var(--accent);
+  }
+  .card-cta svg{
+    width:14px;
+    height:14px;
+  }
+  .load-section{
+    width:100%;
+    max-width:520px;
+    text-align:center;
+  }
+  .load-section .divider{
+    display:flex;
+    align-items:center;
+    gap:12px;
+    color:var(--muted);
+    font-size:12px;
+    margin-bottom:20px;
+  }
+  .load-section .divider::before,
+  .load-section .divider::after{
+    content:"";
+    flex:1 1 auto;
+    height:1px;
+    background:var(--panel-border);
+  }
+  .dropzone{
+    border:2px dashed var(--panel-border);
+    border-radius:10px;
+    padding:26px 16px;
+    text-align:center;
+    font-size:13px;
+    color:var(--muted);
+    cursor:pointer;
+    transition:background .12s ease, border-color .12s ease;
+    background:var(--panel-bg);
+  }
+  .dropzone:hover{
+    background:var(--dropzone-hover-bg);
+    border-color:var(--dropzone-hover-border);
+  }
+  .dropzone.dragover{
+    background:var(--accent-tint);
+    border-color:var(--accent);
+    color:var(--text);
+  }
+  .dropzone strong{
+    display:block;
+    color:var(--text);
+    margin-bottom:4px;
+    font-size:14px;
+  }
+  .load-status{
+    min-height:1.4em;
+    margin-top:10px;
+    font-size:12.5px;
+  }
+  .load-status.error{
+    color:var(--danger);
+  }
+  .load-status.busy{
+    color:var(--muted);
+  }
+  .site-footer{
+    flex:0 0 auto;
+    text-align:center;
+    padding:6px 12px;
+    font-size:11px;
+    color:var(--muted);
+    background:var(--panel-bg);
+    border-top:1px solid var(--panel-border);
+  }
+  .site-footer a{
+    color:var(--muted);
+    text-decoration:underline;
+  }
+  .site-footer a:hover{
+    color:var(--accent);
+  }
+  @media (max-width:760px){
+    main{padding:32px 16px 24px;}
+    .hero h1{font-size:24px;}
+    .card{width:100%;max-width:360px;}
+  }
+</style>
+</head>
+<body>
+<div class="menubar">
+  <span class="brand">Regulus Arms Customizer</span>
+  <button type="button" class="menu-btn theme-toggle-btn" id="themeToggleBtn" title="Switch to light theme" aria-label="Switch to light theme">
+    <svg id="themeIconMoon" viewBox="0 0 24 24" aria-hidden="true">
+      <path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M20.5,14.2A8.5,8.5,0,1,1,9.8,3.5,7,7,0,0,0,20.5,14.2Z"></path>
+    </svg>
+    <svg id="themeIconSun" viewBox="0 0 24 24" aria-hidden="true" style="display:none;">
+      <g fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="4.5"></circle>
+        <path d="M12,2.5v2.5M12,19v2.5M4.6,4.6l1.8,1.8M17.6,17.6l1.8,1.8M2.5,12h2.5M19,12h2.5M4.6,19.4l1.8-1.8M17.6,6.4l1.8-1.8"></path>
+      </g>
+    </svg>
+  </button>
+</div>
+
+<main>
+  <div class="hero">
+    <h1>1911 Grip &amp; PMAG Customizer</h1>
+    <p>Design custom-printed 1911/92FS grip panels or PMAG 30 magazine panels right in your browser. Pick a project below to start fresh, or load a previously exported project file to pick up where you left off.</p>
+  </div>
+
+  <div class="cards">
+    <a class="card" href="./grips.html" id="gripsCard">
+      <div class="card-preview">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 172.47 480.94" aria-hidden="true">
+          <defs>
+            <style>
+              .grip-preview-edge { fill: #e3dac9; }
+            </style>
+          </defs>
+          <path class="grip-preview-edge" fill-rule="evenodd" clip-rule="evenodd" d="M.52,451.78C7.71,302.98,14.9,154.19,22.08,5.39,30.13,3.28,42.03.86,56.59.54c30.58-.69,53.64,8.52,65.77,13.48,8.83,3.61,20.54,9.19,33.43,17.79,5.39,136.04,10.78,272.08,16.17,408.11-4.87,1.92-14.69,6.55-23.18,16.71-7.73,9.26-10.67,18.69-11.86,23.72-45.47-9.52-90.93-19.05-136.4-28.57Z M104.34,55.32A14.77,14.77 0 1,0 74.8,55.32A14.77,14.77 0 1,0 104.34,55.32Z M105.11,414.04A14.56,14.56 0 1,0 75.99,414.04A14.56,14.56 0 1,0 105.11,414.04Z"/>
+          <path fill="#b7c4d6" d="M9.15,445.85L26.94,10.24c10.73-2.64,24.28-4.75,39.89-4.31,38.63,1.08,67.36,17.11,81.41,26.42,5.39,133.52,10.78,267.04,16.17,400.57-4.89,1.91-14.42,6.4-22.64,16.17-6.38,7.58-9.36,15.22-10.78,19.95-5.13-1.66-10.34-3.28-15.63-4.85-28.1-8.32-55.19-14.23-80.87-18.33-3.98-.34-8.31-.55-12.94-.54-4.43,0-8.57.21-12.4.54Z"/>
+          <circle fill="#8a95a6" cx="89.57" cy="55.32" r="8"/>
+          <circle fill="#8a95a6" cx="90.55" cy="414.04" r="8"/>
+        </svg>
+      </div>
+      <div class="card-body">
+        <h2>Grip Customizer</h2>
+        <p>1911 and 92FS grip panels — photos, text, and shape layers over a printable outline.</p>
+        <span class="card-cta">Open editor
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M5,12h14M13,6l6,6-6,6"></path></svg>
+        </span>
+      </div>
+    </a>
+
+    <a class="card" href="./pmag.html" id="pmagCard">
+      <div class="card-preview">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 234.57 584.12" aria-hidden="true">
+          <defs>
+            <style>
+              .pmag-preview-1 { fill: #58595b; stroke: #231f20; stroke-miterlimit: 10; }
+              .pmag-preview-2 { fill: #231f20; stroke: #231f20; stroke-miterlimit: 10; }
+              .pmag-preview-3 { fill: #414042; stroke: #231f20; stroke-miterlimit: 10; }
+              .pmag-preview-4 { fill: #a7a9ac; stroke: #231f20; stroke-miterlimit: 10; }
+              .pmag-preview-5 { fill: #808285; stroke: #231f20; stroke-miterlimit: 10; }
+            </style>
+          </defs>
+          <path class="pmag-preview-4" d="M197.95,578.14c-.3.63-1.77,3.52-5.25,4.85-3.31,1.27-6.19.26-6.88,0-51.24-9.71-102.47-19.42-153.71-29.12l-31.55-12.13v-9.71c8.24-38.43,15.5-80.35,20.84-125.45,3.57-30.15,5.98-59.04,7.47-86.51,1.08-32.36,2.16-64.72,3.24-97.08,1.35-3.24,2.7-6.47,4.04-9.71-4.92-60.72-9.83-121.45-14.75-182.17,11.55-3.06,23.81-5.94,36.73-8.51,18.72-3.72,36.45-6.33,52.97-8.12l13.22-7.5L206.04.52c1.02,1.66,2.23,4.02,3.02,7.04,1.2,4.61.85,8.55.45,10.89,1.81.49,3.62.99,5.43,1.48.62,5.89,1.24,11.79,1.86,17.68l4.62,1.73c4.61,46.51,8.13,95.21,10.18,145.97,1.08,26.61,1.71,52.66,1.95,78.12-1.2,42.39-3.91,87.41-8.66,134.71-6.52,64.94-15.99,125.11-26.93,179.98Z"/>
+          <path class="pmag-preview-2" d="M17.89,501.7c3.61-22.63,7.11-45.57,10.47-68.83,3.22-22.26,6.24-44.29,9.07-66.06,2.14-24.68,3.69-50.77,4.41-78.16.62-23.67.57-46.39,0-68.08-1.89-2.43-3.79-4.85-5.68-7.28l-4.04,9.71c-.86,22.87-1.82,45.9-2.88,69.08-1.17,25.55-2.44,50.9-3.82,76.05-8.28,54.64-16.57,109.27-24.85,163.91,3.67,1.03,7.35,2.05,11.02,3.08l6.3-33.41Z"/>
+          <path class="pmag-preview-2" d="M185.82,582.99c9.82-38.17,18.55-81.76,24.13-130.11,3.62-31.38,5.46-60.94,6.09-88.36,4.42-47.77,7.07-100.31,6.59-156.93-.58-69.4-5.75-132.82-13.11-189.14,1.81.49,3.62.99,5.43,1.48l1.86,17.68,4.62,1.73c6.24,49.44,10.68,103.04,12.13,160.33.72,28.22.67,55.5,0,81.76-1.95,44.17-5.5,91.21-11.23,140.71-6.45,55.73-14.87,107.83-24.37,155.98-1.75,1.62-3.5,3.24-5.25,4.85h-6.88Z"/>
+          <polygon class="pmag-preview-2" points=".56 532.03 187.86 574.92 199.3 571.25 197.95 578.14 192.7 582.99 185.82 582.99 32.11 553.87 .56 541.74 .56 532.03"/>
+          <path class="pmag-preview-1" d="M78.22,228.04l77.15,7.25,11.21-7.25h15.83l7.25,7.25,32.9,5.29h10.68v18.45c-3.67-.35-7.33-.71-11-1.06-9.98-.97-19.96-1.93-29.94-2.9-1.89-.03-5.5.19-7.98,2.67-2.48,2.49-2.6,6.02-2.66,7.59-.28,7.34-1.36,22.53-2.71,42.95-.18.8-.89,4.26,1.12,7.83,1.89,3.36,4.94,4.6,5.75,4.9,11.12,1.33,22.24,2.66,33.36,3.99h11.61l-.8,16.41h-12l-32.18-3.26c-.95.16-3.55.74-5.75,3-2.93,3.02-2.95,6.78-2.94,7.55-1.54,14.29-3.08,28.57-4.62,42.86-.18,1.02-.65,4.41,1.29,7.91,1.5,2.7,3.66,4.07,4.64,4.62,11.9.92,23.79,1.85,35.69,2.77h9.86l-1.67,15.29-9.59,3.03-32.31-4.62c-1.16.15-4.55.72-7.52,3.55-2.53,2.41-3.4,5.16-3.69,6.34-1.6,12.79-3.2,25.59-4.8,38.38-.25.79-1.87,6.2,1.34,10.96,1.57,2.32,3.62,3.51,4.78,4.07,10.55,1.1,21.1,2.2,31.65,3.3h11.52l-2.54,16.55-8.92,2.7-146.45-21.23c-1.29.12-3.48.51-5.66,1.99-4.67,3.16-5.29,8.6-5.38,9.48-1.81,9.14-3.62,18.29-5.44,27.43l-14.51-3.3,4.62-27.69c.36-1.01,1.33-4.17.14-7.93-1.3-4.08-4.29-6.16-5.14-6.71-4.32-1.01-8.64-2.01-12.97-3.02l2.43-14.71,10.23.91c.48.16,3.89,1.21,7.25-.85,3.33-2.05,3.95-5.54,4.03-6.04,1.86-13.87,3.73-27.73,5.59-41.6.21-.9.92-4.51-1.12-8.27-2.18-4.04-5.94-5.37-6.76-5.64-3.64-.59-7.28-1.17-10.92-1.76.66-5.38,1.32-10.76,1.98-16.14l10.97,2.84c1.13-.27,3.94-1.09,6.28-3.67,3.29-3.64,3.18-8.03,3.13-8.95,1.33-13.12,2.67-26.23,4-39.35.05-.88.13-3.96-1.99-6.94-2.15-3.01-5.13-3.94-5.98-4.17-3.9-.35-7.8-.69-11.7-1.04l-.25-14.96,12.64.78c.54,0,3.69,0,6.18-2.53,2.43-2.48,2.42-5.54,2.41-6.09.22-15.39.44-30.77.66-46.16.07-.45.52-3.8-1.96-6.57-2.46-2.75-5.83-2.68-6.28-2.67l-10.9-.08c.22-5.64.44-11.28.65-16.92,3.3-.16,6.6-.32,9.9-.48.84.18,3.61.68,6.19-.88,3.12-1.89,4.68-6.02,3.72-10.24l-1.32-17.56h18.46v21.1c-.12.35-1.36,4.41,1.32,7.91,2.92,3.82,7.69,3.32,7.91,3.3Z"/>
+          <path class="pmag-preview-4" d="M68.25,252.38c.08-.76.4-2.77,2.01-4.47,2.75-2.91,6.79-2.29,7.16-2.23,25.2,1.93,50.39,3.87,75.59,5.8,1.7.41,4.39,1.33,6.71,3.58,2.89,2.8,4.22,6.17,4.22,8.58v41.54c.01.47.09,6.58-4.9,10.03-3.07,2.12-6.65,1.96-8.29,1.84-8.3-.61-36.67-3.37-75.11-7.61-.85-.07-3.89-.44-6.28-2.95-3.55-3.73-2.45-8.81-2.36-9.22.41-14.97.83-29.93,1.24-44.9Z"/>
+          <path class="pmag-preview-4" d="M64.22,334.67c.09-.73.63-4.32,3.81-6.71,2.85-2.15,6.76-2.52,10.19-1.02,22.64,2.31,45.28,4.62,67.92,6.92.8.02,7.29.25,11.34,5.72,3.08,4.16,2.79,8.67,2.68,9.84-1.12,14.09-2.24,28.18-3.35,42.27-.8,1.47-2.37,3.86-5.14,5.59-2.86,1.79-6.05,2.3-9.48,2.19-7.31-.23-33.98-3.85-69.89-9.89-.68,0-4.73,0-7.84-3.25-2.65-2.78-2.88-6.09-2.91-6.93.89-14.91,1.78-29.82,2.68-44.73Z"/>
+          <path class="pmag-preview-4" d="M58.23,412.29c.47-.96,1.44-2.64,3.31-4.05,2.85-2.14,5.89-2.25,6.93-2.24,34.96,3.6,61.07,7.17,71.07,9.29,2.75.58,8.01,1.85,10.56,6.14,2.06,3.46,1.41,7.32,1.12,9.17-1.31,8.28-2.49,20.16-3.8,36.23-.17,3.59-1.02,10.55-5.88,13.55-3.61,2.23-7.86,1.28-9.9.86-13.92-2.93-64.58-11.32-67.92-11.87-2.21-.36-6.66-1.05-9.55-4.55-3.8-4.6-2.62-11.31-1.84-15.88,1.85-10.74,3.69-22.33,5.91-36.66Z"/>
+          <path class="pmag-preview-1" d="M24.19,51.33l37.79-1.57-4.03,8.72-33.77,6.71v-13.87Z"/>
+          <path class="pmag-preview-1" d="M36.05,187.3s28.4-6.04,29.52-6.26,3.35-10.96,3.35-10.96l-36.19.89,1.32,16.33h1.99Z"/>
+          <path class="pmag-preview-3" d="M151.66,89.58l28.18-2.01c.27-.05,3.94-.71,6.21,1.81.94,1.04,1.27,2.21,1.39,2.89v10.73c.09.19.86,1.87,0,3.45-.82,1.5-2.78,2.26-4.7,1.7-9.69.82-19.38,1.64-29.07,2.46-.59.05-2.39.12-4.15-1.04-1.18-.78-1.82-1.77-2.11-2.32l-1.12-11.63c.13-.7.51-2.22,1.76-3.67,1.34-1.56,2.93-2.15,3.61-2.36Z"/>
+          <path class="pmag-preview-5" d="M150.1,112.16v11.85l2.24,1.57h30.6c2.03.48,3.9-.33,4.51-1.7.43-.96.14-1.94,0-2.32v-13.87l-33.77,2.91-3.58,1.57Z"/>
+          <circle class="pmag-preview-5" cx="171.57" cy="158.9" r="9.39"/>
+          <circle class="pmag-preview-5" cx="174.25" cy="182.01" r="9.39"/>
+          <rect class="pmag-preview-5" x="157.03" y="132.74" width="26.61" height="13.19"/>
+          <path class="pmag-preview-5" d="M179.17,22.26l-65.97,6.71c-.79.46-1.66.93-2.62,1.37-.48.22-.95.42-1.41.6-5.51.47-12.3,1.55-19.79,3.92-5.21,1.65-9.73,3.6-13.53,5.51,3.79,1.29,8.33,2.53,13.53,3.34,6.98,1.1,16.14,1.26,19.35.68.4-.07,1.94-.38,3.96-.16.91.1,1.65.27,2.12.4,22.05-1.35,44.1-2.69,66.15-4.04l-1.79-18.34Z"/>
+          <path class="pmag-preview-5" d="M63.11,502.85l-2.46,11.41c-.13.3-.87,2.1,0,4.03,1.12,2.49,3.87,2.89,4.03,2.91,34.89,5.96,69.77,11.93,104.66,17.89.34.14,2.2.89,4.25,0,2.52-1.1,3.08-3.73,3.13-3.97.75-3.67,1.49-7.34,2.24-11-.17-.73-.5-1.69-1.12-2.7-1.17-1.89-2.74-2.9-3.58-3.35l-104.21-18.11c-.29-.13-2.18-.94-4.25,0-1.9.87-2.56,2.58-2.68,2.91Z"/>
+        </svg>
+      </div>
+      <div class="card-body">
+        <h2>PMAG 30 Customizer</h2>
+        <p>PMAG 30 magazine panels — the same layer-based editor, sized for the magazine body.</p>
+        <span class="card-cta">Open editor
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" d="M5,12h14M13,6l6,6-6,6"></path></svg>
+        </span>
+      </div>
+    </a>
+  </div>
+
+  <div class="load-section">
+    <div class="divider">or continue a saved project</div>
+    <div class="dropzone" id="projectDropzone" tabindex="0" role="button" aria-label="Drop a project zip here or click to browse">
+      <strong>Drag &amp; drop an exported project .zip here</strong>
+      or click to browse — we'll detect whether it's a grip or PMAG project and open the right editor
+    </div>
+    <input type="file" id="projectFileInput" accept=".zip,application/zip" style="display:none;">
+    <p class="load-status" id="loadStatus"></p>
+  </div>
+</main>
+
+<footer class="site-footer">&copy; 2026 Regulus Arms LLC. All rights reserved. &middot; <a href="./tos.html">Terms of Use</a></footer>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  // ---- theme toggle ----
+  const themeToggleBtn = document.getElementById("themeToggleBtn");
+  const themeIconMoon = document.getElementById("themeIconMoon");
+  const themeIconSun = document.getElementById("themeIconSun");
+
+  function syncThemeIcon(){
+    const isDark = document.documentElement.getAttribute("data-theme") === "dark";
+    themeIconMoon.style.display = isDark ? "" : "none";
+    themeIconSun.style.display = isDark ? "none" : "";
+    themeToggleBtn.title = isDark ? "Switch to light theme" : "Switch to dark theme";
+    themeToggleBtn.setAttribute("aria-label", themeToggleBtn.title);
+  }
+  syncThemeIcon();
+
+  themeToggleBtn.addEventListener("click", () => {
+    const current = document.documentElement.getAttribute("data-theme") === "dark" ? "dark" : "light";
+    const next = current === "dark" ? "light" : "dark";
+    document.documentElement.setAttribute("data-theme", next);
+    try{ localStorage.setItem("landingCustomizerTheme", next); }catch(e){ /* ignore */ }
+    syncThemeIcon();
+  });
+
+  // ---- project file handoff (IndexedDB) so the target editor can pick the file back up ----
+  function openHandoffDB(){
+    return new Promise((resolve, reject) => {
+      const req = indexedDB.open("customizerHandoff", 1);
+      req.onupgradeneeded = () => { req.result.createObjectStore("files"); };
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+  function stashPendingProjectFile(file){
+    return openHandoffDB().then((db) => new Promise((resolve, reject) => {
+      const tx = db.transaction("files", "readwrite");
+      tx.objectStore("files").put(file, "pending");
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    }));
+  }
+
+  // ---- detect which editor a project zip belongs to, from its project.xml root tag ----
+  function detectProjectKind(file){
+    return JSZip.loadAsync(file).then((zip) => {
+      const xmlEntry = zip.file("project.xml");
+      if (!xmlEntry) throw new Error("That zip doesn't contain a project.xml — it doesn't look like a Grip or PMAG Customizer export.");
+      return xmlEntry.async("string");
+    }).then((xmlText) => {
+      const doc = new DOMParser().parseFromString(xmlText, "application/xml");
+      if (doc.querySelector("parsererror")) throw new Error("Couldn't parse project.xml in that zip.");
+      const rootTag = doc.documentElement.tagName;
+      if (rootTag === "gripCustomizerProject") return "grips.html";
+      if (rootTag === "pmagCustomizerProject") return "pmag.html";
+      throw new Error("Unrecognized project file.");
+    });
+  }
+
+  const projectDropzone = document.getElementById("projectDropzone");
+  const projectFileInput = document.getElementById("projectFileInput");
+  const loadStatus = document.getElementById("loadStatus");
+
+  function setStatus(message, isError){
+    loadStatus.textContent = message || "";
+    loadStatus.classList.toggle("error", !!isError);
+    loadStatus.classList.toggle("busy", !isError && !!message);
+  }
+
+  function handleProjectFile(file){
+    if (!file) return;
+    setStatus("Reading project file…", false);
+    detectProjectKind(file).then((destination) => {
+      return stashPendingProjectFile(file).then(() => {
+        setStatus("Opening editor…", false);
+        location.href = "./" + destination;
+      });
+    }).catch((err) => {
+      console.error(err);
+      setStatus((err && err.message) || "Couldn't read that file.", true);
+    });
+  }
+
+  projectFileInput.addEventListener("change", (e) => {
+    const file = e.target.files && e.target.files[0];
+    handleProjectFile(file);
+    projectFileInput.value = "";
+  });
+
+  projectDropzone.addEventListener("click", () => projectFileInput.click());
+  projectDropzone.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" || e.key === " "){
+      e.preventDefault();
+      projectFileInput.click();
+    }
+  });
+  ["dragenter", "dragover"].forEach((evt) => {
+    projectDropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      projectDropzone.classList.add("dragover");
+    });
+  });
+  ["dragleave", "dragend"].forEach((evt) => {
+    projectDropzone.addEventListener(evt, (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      projectDropzone.classList.remove("dragover");
+    });
+  });
+  projectDropzone.addEventListener("drop", (e) => {
+    e.preventDefault();
+    e.stopPropagation();
+    projectDropzone.classList.remove("dragover");
+    const file = e.dataTransfer.files && e.dataTransfer.files[0];
+    handleProjectFile(file);
+  });
+
+  // prevent the browser from navigating away if a file is dropped outside the dropzone
+  ["dragover", "drop"].forEach((evt) => {
+    window.addEventListener(evt, (e) => {
+      if (!projectDropzone.contains(e.target)) e.preventDefault();
+    });
+  });
+})();
+</script>
+</body>
+</html>
