@@ -957,7 +957,11 @@
     </div>
 
     <div class="field">
-      <label>History <span style="font-weight:400;color:var(--muted);">(Ctrl+Z to undo)</span></label>
+      <label for="historyLimitInput">History <span style="font-weight:400;color:var(--muted);">(Ctrl+Z to undo)</span></label>
+      <div class="row" style="margin-bottom:8px;">
+        <input type="number" id="historyLimitInput" min="-1" step="1" style="width:64px;padding:5px 6px;font-size:12px;border-radius:6px;border:1px solid var(--panel-border);">
+        <span style="font-size:11.5px;color:var(--muted);">max undo steps (-1 = unlimited)</span>
+      </div>
       <ul class="history-list" id="historyList"></ul>
     </div>
   </aside>
@@ -1084,7 +1088,21 @@
   // by reference across snapshots (immutable), so only the small xform/color sub-objects
   // are actually deep-cloned per snapshot. `historyIndex` is the currently-active entry;
   // making a new change after jumping back drops everything past it (see pushHistoryEntry).
-  const HISTORY_MAX = 50;
+  const DEFAULT_HISTORY_LIMIT = 50;
+  const HISTORY_LIMIT_KEY = "gripCustomizerHistoryLimit";
+  // -1 means unlimited (no entries ever get dropped); any other value is clamped to >= 1.
+  function sanitizeHistoryLimit(v){
+    const n = parseInt(v, 10);
+    if (!Number.isFinite(n)) return DEFAULT_HISTORY_LIMIT;
+    if (n === -1) return -1;
+    if (n < 1) return 1;
+    return n;
+  }
+  let historyLimit = DEFAULT_HISTORY_LIMIT;
+  try{
+    const savedHistoryLimit = localStorage.getItem(HISTORY_LIMIT_KEY);
+    if (savedHistoryLimit !== null) historyLimit = sanitizeHistoryLimit(savedHistoryLimit);
+  }catch(e){ /* ignore */ }
   let historyStack = [];       // [{ desc, thumbnail: dataURL|null, state:{shapeKey,levelView,layers,selectedLayerId} }]
   let historyIndex = -1;
   let historyBeforeSnapshot = null; // captured at the start of an in-progress drag/typing session
@@ -1165,6 +1183,7 @@
   const shapeStrokeWidthRange = document.getElementById("shapeStrokeWidthRange");
   const shapeStrokeWidthLabel = document.getElementById("shapeStrokeWidthLabel");
   const historyListEl = document.getElementById("historyList");
+  const historyLimitInput = document.getElementById("historyLimitInput");
   const modalOverlay = document.getElementById("modalOverlay");
   const modalBox = document.getElementById("modalBox");
   const modalMessage = document.getElementById("modalMessage");
@@ -1342,13 +1361,34 @@
     historyStack = historyStack.slice(0, historyIndex + 1);
     const entry = { desc, thumbnail: null, state: afterState };
     historyStack.push(entry);
-    if (historyStack.length > HISTORY_MAX) historyStack.shift();
+    if (historyLimit >= 0 && historyStack.length > historyLimit) historyStack.shift();
     historyIndex = historyStack.length - 1;
     rasterizeThumbnail((dataUrl) => {
       entry.thumbnail = dataUrl;
       renderHistoryPanel();
     });
     renderHistoryPanel();
+  }
+
+  // trims the stack down to the current historyLimit — used when the user lowers the
+  // limit below the number of entries already recorded (pushHistoryEntry only ever needs
+  // to drop one entry at a time, since it only grows the stack by one entry per call).
+  function applyHistoryLimit(){
+    if (historyLimit < 0 || historyStack.length <= historyLimit) return;
+    const removeCount = historyStack.length - historyLimit;
+    historyStack = historyStack.slice(removeCount);
+    historyIndex = Math.max(0, historyIndex - removeCount);
+    renderHistoryPanel();
+  }
+
+  if (historyLimitInput){
+    historyLimitInput.value = historyLimit;
+    historyLimitInput.addEventListener("change", () => {
+      historyLimit = sanitizeHistoryLimit(historyLimitInput.value);
+      historyLimitInput.value = historyLimit;
+      try{ localStorage.setItem(HISTORY_LIMIT_KEY, String(historyLimit)); }catch(e){ /* ignore */ }
+      applyHistoryLimit();
+    });
   }
 
   // records a discrete, one-shot change (button click, select/checkbox change) — always
