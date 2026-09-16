@@ -48,13 +48,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>1911 Grip Customizer</title>
+<title>92FS Grip Customizer</title>
 <script>
   // set the theme before first paint so there's no flash of the wrong palette
   (function(){
     var theme = "dark";
     try{
-      var saved = localStorage.getItem("gripCustomizerTheme");
+      var saved = localStorage.getItem("grip92fsCustomizerTheme");
       if (saved === "light" || saved === "dark") theme = saved;
     }catch(e){ /* ignore */ }
     document.documentElement.setAttribute("data-theme", theme);
@@ -732,13 +732,11 @@
 </div>
 <div class="app">
   <aside class="panel">
-    <h1>Grip Customizer</h1>
+    <h1>92FS Grip Customizer</h1>
 
     <div class="field">
-      <label for="shapeSelect">Grip Panel Selector</label>
+      <label for="shapeSelect">92FS Panel Selector</label>
       <select id="shapeSelect" style="width:100%;padding:7px 8px;font-size:13px;border-radius:8px;border:1px solid var(--panel-border);">
-        <option value="left">1911 Left</option>
-        <option value="right">1911 Right</option>
         <option value="92fs-left">92FS Left</option>
         <option value="92fs-right">92FS Right</option>
       </select>
@@ -750,7 +748,7 @@
         <button class="btn" id="previewFadeBtn" type="button">Preview edge fade</button>
         <button class="btn" id="previewCmykBtn" type="button">Preview CMYK colors</button>
       </div>
-      <p class="hint" id="previewFadeHint" style="display:none;margin:6px 0 0;text-align:left;">Simulated preview only (1911 grips) — shows how the ~2-3mm curved outer edges fade and shift color when printed. Not included in exports.</p>
+      <p class="hint" id="previewFadeHint" style="display:none;margin:6px 0 0;text-align:left;">Simulated preview only (92FS grips) — shows how the ~2-3mm curved outer edges fade and shift color when printed. Not included in exports.</p>
       <p class="hint" id="previewCmykHint" style="display:none;margin:6px 0 0;text-align:left;">Simulated preview only — approximates how uploaded photos shift toward printable CMYK colors (shape/text fills are already exact CMYK, so they're unaffected). Not included in exports.</p>
     </div>
 
@@ -984,52 +982,6 @@
   const NS = "http://www.w3.org/2000/svg";
   const XLINK = "http://www.w3.org/1999/xlink";
 
-  // These are built from the "1911-left-new.svg" / "1911-right-new.svg" reference art,
-  // which draws each panel as two overlapping shapes: a full-silhouette "edge" region
-  // (dark grey in the reference) and an inset "face" region (light grey in the
-  // reference) sitting on top of it, plus two solid circles marking the screw holes.
-  // For the app: the two screw holes are cut directly into the edge path itself (as
-  // evenodd sub-paths, same trick the old hand-authored shapes used) so they behave as
-  // real holes in both the print clip and the on-screen render; the inset face path is
-  // kept only as an invisible `data-role="edge-face"` reference (see
-  // parseAndLoadBackground / appendEdgeFadeDefs) so the "preview edge fade" effect can
-  // mask itself precisely to the true dark edge band from the artwork instead of an
-  // approximated stroke band. On the artboard itself, only the edge path is ever drawn,
-  // filled bone white — so the panel reads as one uniform color until fade preview is on.
-  // Left panel now also carries its own edge-fade ring around each screw hole (the
-  // reference art's black ring between the hole's actual white cutout and the grey face) —
-  // captured via invisible `data-role="hole-fade-ring"` circles at the ring's outer radius,
-  // so appendEdgeFadeDefs can add that annulus to the fade mask alongside the perimeter band.
-  const SVG_LEFT = `<?xml version="1.0" encoding="UTF-8"?>
-<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 172.47 480.94">
-  <defs>
-    <style>
-      .cls-edge {
-        fill: #e3dac9;
-      }
-    </style>
-  </defs>
-  <path class="cls-edge" fill-rule="evenodd" clip-rule="evenodd" d="M.52,451.78C7.71,302.98,14.9,154.19,22.08,5.39,30.13,3.28,42.03.86,56.59.54c30.58-.69,53.64,8.52,65.77,13.48,8.83,3.61,20.54,9.19,33.43,17.79,5.39,136.04,10.78,272.08,16.17,408.11-4.87,1.92-14.69,6.55-23.18,16.71-7.73,9.26-10.67,18.69-11.86,23.72-45.47-9.52-90.93-19.05-136.4-28.57Z M104.34,55.32A14.77,14.77 0 1,0 74.8,55.32A14.77,14.77 0 1,0 104.34,55.32Z M105.11,414.04A14.56,14.56 0 1,0 75.99,414.04A14.56,14.56 0 1,0 105.11,414.04Z"/>
-  <path data-role="edge-face" d="M9.15,445.85L26.94,10.24c10.73-2.64,24.28-4.75,39.89-4.31,38.63,1.08,67.36,17.11,81.41,26.42,5.39,133.52,10.78,267.04,16.17,400.57-4.89,1.91-14.42,6.4-22.64,16.17-6.38,7.58-9.36,15.22-10.78,19.95-5.13-1.66-10.34-3.28-15.63-4.85-28.1-8.32-55.19-14.23-80.87-18.33-3.98-.34-8.31-.55-12.94-.54-4.43,0-8.57.21-12.4.54Z"/>
-  <circle data-role="hole-fade-ring" cx="89.57" cy="55.32" r="17.48"/>
-  <circle data-role="hole-fade-ring" cx="90.55" cy="414.04" r="17.48"/>
-</svg>`;
-
-  const SVG_RIGHT = `<?xml version="1.0" encoding="UTF-8"?>
-<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 170.21 479.72">
-  <defs>
-    <style>
-      .cls-edge {
-        fill: #e3dac9;
-      }
-    </style>
-  </defs>
-  <path class="cls-edge" fill-rule="evenodd" clip-rule="evenodd" d="M.51,440.61L17.11,32.1c7.21-5.03,16.31-10.55,27.31-15.53,11.77-5.32,22.61-8.62,31.59-10.71,8.55-2.55,20.46-5.14,34.8-5.35,16.15-.24,29.43,2.63,38.55,5.35,1.25,20.7,2.5,41.4,3.75,62.11-2.56,3.17-6.12,8.36-8.57,15.53-2.65,7.76-2.87,14.53-2.68,18.74.38,4.19,1.34,9.82,3.75,16.06,3.01,7.81,7.1,13.51,10.17,17.13,4.64,105.29,9.28,210.59,13.92,315.88-27.62,6.12-55.23,12.25-82.85,18.37-17.36,3.16-34.71,6.31-52.07,9.47-3.01-6.33-7.98-14.95-16.06-23.56-6.46-6.89-12.98-11.71-18.2-14.99Z M97.68,54.72A15.12,15.12 0 1,0 67.44,54.72A15.12,15.12 0 1,0 97.68,54.72Z M94.6,412.5A15.12,15.12 0 1,0 64.36,412.5A15.12,15.12 0 1,0 94.6,412.5Z"/>
-  <path data-role="edge-face" d="M37.45,471.13c3.7-.91,9.72-2.41,17.13-4.28,45.4-11.49,57.06-15.51,78.14-18.41,6.51-.9,16.29-2.01,28.4-2.47l-10.71-309.46c-3.23-3.81-12.85-16.13-13.92-34.8-1.06-18.45,6.87-31.67,9.64-35.87-1.43-19.27-2.86-38.55-4.28-57.82-13.79-1.76-33.61-2.7-56.75,1.62-28.64,5.35-50.13,16.49-63.18,24.61-4.64,134.03-9.28,268.05-13.92,402.08,5.02,3.11,12.13,8.35,18.74,16.6,5.4,6.74,8.69,13.28,10.71,18.2Z"/>
-  <circle data-role="hole-fade-ring" cx="82.56" cy="54.72" r="18.87"/>
-  <circle data-role="hole-fade-ring" cx="79.48" cy="412.5" r="18.87"/>
-</svg>`;
-
   const SVG_92FS_LEFT = `<?xml version="1.0" encoding="UTF-8"?>
 <svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 209.85 451.69">
   <defs>
@@ -1075,8 +1027,6 @@
   // units at the correct scale. Shapes without a known measurement fall back to a generic
   // ~5in (127mm) grip-panel assumption (see appendEdgeFadeDefs).
   const BUILTIN_SHAPES = {
-    left: { label: "1911 Left", svg: SVG_LEFT, refLengthMM: 105.55 },
-    right: { label: "1911 Right", svg: SVG_RIGHT, refLengthMM: 104.6 },
     "92fs-left": { label: "92FS Left", svg: SVG_92FS_LEFT, refLengthMM: 109.7 },
     "92fs-right": { label: "92FS Right", svg: SVG_92FS_RIGHT, refLengthMM: 115.3 }
   };
@@ -1133,7 +1083,7 @@
   let historyIndex = -1;
   let historyBeforeSnapshot = null; // captured at the start of an in-progress drag/typing session
   let levelView = false;      // display-only: show the shape rotated so its bottom edge is level
-  let previewFadeOn = false;  // display-only: simulate the curved-edge print fade on 1911 grips
+  let previewFadeOn = false;  // display-only: simulate the curved-edge print fade on 92FS grips
   let previewCmykOn = false;  // display-only: approximate how uploaded photos shift when printed in CMYK
   let colorSamplingActive = false;    // color dropper: hovering the stage previews a sampled color
   let sampleCanvasCtx = null;         // 2D context of the offscreen raster snapshot used for sampling
@@ -2089,12 +2039,12 @@
     const clipClones = [];
     let clipBBox = null;
     const hullPoints = [];
-    // an optional invisible "face" reference shape (see SVG_LEFT/SVG_RIGHT) marking the
+    // an optional invisible "face" reference shape (see SVG_92FS_LEFT/SVG_92FS_RIGHT) marking the
     // inset flat-face region of a panel, as opposed to its outer edge band — used only to
     // precisely mask the "preview edge fade" effect, never rendered or counted toward the
     // print clip.
     let edgeFaceClone = null;
-    // optional invisible marker circles (see SVG_LEFT) giving the outer radius of an
+    // optional invisible marker circles (see SVG_92FS_LEFT) giving the outer radius of an
     // edge-fade ring around a screw hole — the artwork's actual (smaller) hole radius is
     // already recovered from holeCircles below, so together these define each ring's
     // inner/outer bounds for appendEdgeFadeDefs.
@@ -2472,7 +2422,7 @@
   // ---- on-screen layer stack) — it never touches the export paths                   ----
   // ---- (buildClippedLayersSvg / buildFullLayersSvg), which stay unaffected.          ----
   function isFadeEligibleShape(){
-    return ["left", "right", "92fs-left", "92fs-right"].includes(shapeSelect.value);
+    return ["92fs-left", "92fs-right"].includes(shapeSelect.value);
   }
 
   function updatePreviewFadeUI(){
@@ -2540,7 +2490,7 @@
 
   // Builds the pieces (in `defs`) needed to render a second, distorted copy of the layer
   // stack that's only visible in a band hugging the panel's true edge. When the loaded
-  // shape carries a precise `edgeFaceClone` (see SVG_LEFT/SVG_RIGHT and
+  // shape carries a precise `edgeFaceClone` (see SVG_92FS_LEFT/SVG_92FS_RIGHT and
   // parseAndLoadBackground) — the artwork's real inset "face" region — the band is the
   // exact ring between the panel's outer silhouette and that face region, so it follows
   // the actual dark edge area drawn in the source artwork, holes and all. Shapes without
@@ -4499,7 +4449,7 @@
   // ---- export: project.xml — position/size/rotation/stacking data for every layer, plus ----
   // ---- which background shape was used, so the zip can be re-loaded exactly as exported. ----
   function buildProjectXML(assetFilenames, fontFilesMap, zip){
-    const doc = document.implementation.createDocument(null, "gripCustomizerProject", null);
+    const doc = document.implementation.createDocument(null, "grip92fsCustomizerProject", null);
     const root = doc.documentElement;
     root.setAttribute("version", "2");
     root.setAttribute("exportedAt", new Date().toISOString());
@@ -4675,7 +4625,7 @@
   themeToggleBtn.addEventListener("click", () => {
     const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
     applyTheme(next);
-    try{ localStorage.setItem("gripCustomizerTheme", next); }catch(e){ /* ignore */ }
+    try{ localStorage.setItem("grip92fsCustomizerTheme", next); }catch(e){ /* ignore */ }
   });
 
   // ---- import: re-create the editor from a previously exported project zip ----
@@ -4792,9 +4742,9 @@
   }
 
   function applyImportedProject(shapeValue, wantLevelView, newLayers, savedCounter){
-    const shape = BUILTIN_SHAPES[shapeValue] || BUILTIN_SHAPES.left;
+    const shape = BUILTIN_SHAPES[shapeValue] || BUILTIN_SHAPES["92fs-left"];
     currentShapeLabel = shape.label;
-    shapeSelect.value = BUILTIN_SHAPES[shapeValue] ? shapeValue : "left";
+    shapeSelect.value = BUILTIN_SHAPES[shapeValue] ? shapeValue : "92fs-left";
     updatePreviewFadeUI();
     parseAndLoadBackground(shape.svg);
 
@@ -4832,7 +4782,7 @@
         desc: entryEl.getAttribute("description") || "",
         thumbnail: thumbEl ? thumbEl.textContent : null,
         state: {
-          shapeKey: entryBgEl ? entryBgEl.getAttribute("shape") : "left",
+          shapeKey: entryBgEl ? entryBgEl.getAttribute("shape") : "92fs-left",
           levelView: entryBgEl ? entryBgEl.getAttribute("levelView") === "true" : false,
           selectedLayerId: entryEl.hasAttribute("selectedLayerId") ? parseInt(entryEl.getAttribute("selectedLayerId"), 10) : null,
           layers: entryLayers.filter(Boolean)
@@ -4846,7 +4796,7 @@
     projectZipDropzone.classList.add("dragover");
     JSZip.loadAsync(file).then((zip) => {
       const xmlEntry = zip.file("project.xml");
-      if (!xmlEntry) throw new Error("This zip doesn't contain a project.xml — it doesn't look like a Grip Customizer export.");
+      if (!xmlEntry) throw new Error("This zip doesn't contain a project.xml — it doesn't look like a 92FS Grip Customizer export.");
       return xmlEntry.async("string").then((xmlText) => {
         const doc = new DOMParser().parseFromString(xmlText, "application/xml");
         if (doc.querySelector("parsererror")) throw new Error("Couldn't parse project.xml in that zip.");
@@ -4968,11 +4918,11 @@
     if (f.google) ensureGoogleFontEmbedded(f.google); // warm the export cache up front
   });
 
-  shapeSelect.value = "left";
-  currentShapeLabel = BUILTIN_SHAPES.left.label;
+  shapeSelect.value = "92fs-left";
+  currentShapeLabel = BUILTIN_SHAPES["92fs-left"].label;
   updatePreviewFadeUI();
   updatePreviewCmykUI();
-  parseAndLoadBackground(BUILTIN_SHAPES.left.svg);
+  parseAndLoadBackground(BUILTIN_SHAPES["92fs-left"].svg);
   renderLayerList();
   updateControlsEnabled();
   syncTextControls();

@@ -732,15 +732,13 @@
 </div>
 <div class="app">
   <aside class="panel">
-    <h1>Grip Customizer</h1>
+    <h1>1911 Grip Customizer</h1>
 
     <div class="field">
-      <label for="shapeSelect">Grip Panel Selector</label>
+      <label for="shapeSelect">1911 Panel Selector</label>
       <select id="shapeSelect" style="width:100%;padding:7px 8px;font-size:13px;border-radius:8px;border:1px solid var(--panel-border);">
         <option value="left">1911 Left</option>
         <option value="right">1911 Right</option>
-        <option value="92fs-left">92FS Left</option>
-        <option value="92fs-right">92FS Right</option>
       </select>
       <div class="checkbox-row" style="margin-top:8px;">
         <input type="checkbox" id="levelViewCheckbox">
@@ -1030,55 +1028,13 @@
   <circle data-role="hole-fade-ring" cx="79.48" cy="412.5" r="18.87"/>
 </svg>`;
 
-  const SVG_92FS_LEFT = `<?xml version="1.0" encoding="UTF-8"?>
-<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 209.85 451.69">
-  <defs>
-    <style>
-      .cls-edge {
-        fill: #e3dac9;
-      }
-    </style>
-  </defs>
-  <path class="cls-edge" fill-rule="evenodd" clip-rule="evenodd" d="M.5,409.52v-235.4c.58-.26,13.6-6.45,15.04-20.35,1.09-10.53-4.93-20.93-15.04-25.66V20.14c.16-1.4.74-4.91,3.54-7.96,4.71-5.14,11.58-4.51,12.39-4.42,13.57,3.24,27.14,6.49,40.71,9.73,1.5-.59,4.03-1.85,6.19-4.42,4.24-5.04,3.68-11.13,3.54-12.39,47.49,12.39,94.99,24.78,142.48,37.17v44.25c-7.75,3.43-19.55,9.8-30.97,21.24-13.18,13.2-19.79,27.08-23.01,35.4-1.95,13.99-2.11,25.74-1.77,34.51.3,7.81,1.71,18.18,4.51,38.59,2.8,20.4,3.26,21.85,4.67,33.53,1.84,15.18,1.54,16.65,3.28,33.05,2.19,20.59,3.15,22.93,6.48,50.14,2.69,21.93,4.03,32.9,4.07,39.37.07,11.03.08,29-7.08,50.44-4.59,13.76-10.64,24.72-15.93,32.74-51.03-13.86-102.06-27.73-153.1-41.59Z M90.2,64.12A14.01,14.01 0 1,0 62.18,64.12A14.01,14.01 0 1,0 90.2,64.12Z M90.2,360.6A14.01,14.01 0 1,0 62.18,360.6A14.01,14.01 0 1,0 90.2,360.6Z"/>
-  <path data-role="edge-face" d="M12,123.68V18.37c9.42,2.08,21.08,3.76,34.47,3.73,7.8-.02,14.92-.61,21.24-1.48,12.4,3.68,24.81,7.35,37.21,11.03l6.19-9.73,80.53,22.12c1.81,2.92,4.67,8.39,5.51,15.84,1.03,9.14-1.55,16.28-2.97,19.52-13.86,9.91-27.72,19.83-41.58,29.74-2.12,3.48-4.59,8.32-6.38,14.4-1.52,5.14-2.13,9.75-2.36,13.41-1.24,5.83-2.27,12.59-2.74,20.12-.63,10.26-.03,19.33.97,26.78,7.37,64.9,14.75,129.79,22.12,194.69-.42,7.85-1.98,19.61-7.38,32.78-5.8,14.14-13.66,24.09-19.16,30.06-23.22-8.89-49.73-17.36-79.31-24.11-14.85-3.39-29.11-6.03-42.67-8.08-1.23-77.81-2.45-155.62-3.68-233.43,10.8-4.32,17.85-14.86,17.7-26.41-.15-11.29-7.15-21.45-17.7-25.66Z"/>
-  <path data-role="fade-extra" d="M104.92,31.64l6.19-9.73,46.22,83.84c-1.58,1.13-3.16,2.26-4.74,3.39-2.09-1.32-5.02-3.39-8.08-6.4-1.24-1.22-4.3-4.36-7.42-9.37-4.34-6.96-16.58-30.02-32.18-61.73Z"/>
-  <circle data-role="hole-fade-ring" cx="76.19" cy="64.12" r="16.66"/>
-  <circle data-role="hole-fade-ring" cx="76.19" cy="360.6" r="16.66"/>
-</svg>`;
-
-  // Like the 1911 shapes: the two screw holes are cut into the edge path at their true
-  // (smaller) radius, the inset face path is kept only as an invisible `edge-face`
-  // reference, and `hole-fade-ring` markers give each hole's outer fade-ring radius. This
-  // panel's reference art also has a small extra dark sliver (a bevel/groove line near the
-  // top, separate from the main silhouette) that's part of the fade family but not itself a
-  // hole or the outer edge — kept as an invisible `data-role="fade-extra"` reference so
-  // appendEdgeFadeDefs can add it back into the fade mask alongside the perimeter/hole rings
-  // (it would otherwise fall inside the face region and get masked out with the rest of it).
-  const SVG_92FS_RIGHT = `<?xml version="1.0" encoding="UTF-8"?>
-<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 257.64 550.78">
-  <defs>
-    <style>
-      .cls-edge {
-        fill: #e3dac9;
-      }
-    </style>
-  </defs>
-  <path class="cls-edge" fill-rule="evenodd" clip-rule="evenodd" d="M68.64,550.21l176.11-45.13V226.32c-1.1-.81-13.96-10.67-13.27-27.43.62-15.16,11.81-23.7,13.27-24.78.03-5.49.15-13.43.53-23.01.77-19.39,1.2-29.32,3.62-41.16,1.35-6.62,3.74-15.99,8.24-26.98V.65L.5,70.57v48.67c8.49,3.78,20.07,10.06,31.86,20.35,10.81,9.44,18.19,19.12,23.01,26.55,3.2,4.53,7.03,11.04,9.73,19.47,4.68,14.56,3.29,27.08,2.65,32.74-3.49,31.02-5.34,62.21-9.08,93.2-4.77,39.51-5.75,53.04-8.5,68.18-.46,2.51-2.28,12.39-3.89,25.9-.56,4.68-1.08,9.79-1.53,15.37-1.79,22.31-1.43,40.57-.88,52.21.17,10.85,1.68,26.55,7.96,44.25,4.96,13.98,11.38,24.92,16.81,32.74Z M179.92,157.4A18.03,18.03 0 1,0 143.86,157.4A18.03,18.03 0 1,0 179.92,157.4Z M179.92,447.11A18.03,18.03 0 1,0 143.86,447.11A18.03,18.03 0 1,0 179.92,447.11Z"/>
-  <path data-role="edge-face" d="M19.08,74.99l94.69-25.66,9.73,12.83,102.65-31.42,20.35-14.16v68.14c-3.24,29.79-6.49,59.59-9.73,89.38-11.62,4.02-19.43,14.77-19.47,26.55-.03,10.22,5.79,19.76,15.04,24.78.88,90.27,1.77,180.53,2.65,270.8-34.06,8.22-69.56,18.13-106.19,30.09-12.35,4.03-24.45,8.17-36.28,12.39h-15.93c-4.21-7.38-8.57-16.24-12.39-26.55-5.57-15.04-8.34-28.75-9.73-39.82.88-19.14,2.21-34.3,3.08-43.25,6.48-66.62,22.58-149.68,27.01-194.8.54-5.47,1.59-17.38,0-32.74-1.25-12.05-3.64-21.64-5.31-27.43-5.01-7.96-10.03-15.93-15.04-23.89l-45.13-32.74v-42.48Z"/>
-  <path data-role="fade-extra" d="M113.77,49.33l9.73,12.83c-17.9,31.75-35.81,63.5-53.71,95.24-1.86-2.4-3.72-4.79-5.58-7.19l49.56-100.88Z"/>
-  <circle data-role="hole-fade-ring" cx="161.89" cy="157.4" r="22.73"/>
-  <circle data-role="hole-fade-ring" cx="161.89" cy="447.11" r="22.73"/>
-</svg>`;
-
   // `refLengthMM` is the real-world bottom-most-to-top-most measurement of that panel,
   // used by appendEdgeFadeDefs to convert its physical edge-fade width (FADE_MM) into SVG
   // units at the correct scale. Shapes without a known measurement fall back to a generic
   // ~5in (127mm) grip-panel assumption (see appendEdgeFadeDefs).
   const BUILTIN_SHAPES = {
     left: { label: "1911 Left", svg: SVG_LEFT, refLengthMM: 105.55 },
-    right: { label: "1911 Right", svg: SVG_RIGHT, refLengthMM: 104.6 },
-    "92fs-left": { label: "92FS Left", svg: SVG_92FS_LEFT, refLengthMM: 109.7 },
-    "92fs-right": { label: "92FS Right", svg: SVG_92FS_RIGHT, refLengthMM: 115.3 }
+    right: { label: "1911 Right", svg: SVG_RIGHT, refLengthMM: 104.6 }
   };
 
   const BASE_FONT_SIZE = 80;
@@ -2099,7 +2055,7 @@
     // already recovered from holeCircles below, so together these define each ring's
     // inner/outer bounds for appendEdgeFadeDefs.
     const holeFadeRings = [];
-    // optional invisible extra fade-zone shapes (see SVG_92FS_RIGHT) — small dark features
+    // optional invisible extra fade-zone shapes (data-role="fade-extra") — small dark features
     // (a bevel/groove line etc.) that are part of the fade family but sit inside the face
     // region, so they'd otherwise be masked out along with the rest of it; added back into
     // the fade mask as-is (no inner cutout, unlike hole rings) by appendEdgeFadeDefs.
@@ -2472,7 +2428,7 @@
   // ---- on-screen layer stack) — it never touches the export paths                   ----
   // ---- (buildClippedLayersSvg / buildFullLayersSvg), which stay unaffected.          ----
   function isFadeEligibleShape(){
-    return ["left", "right", "92fs-left", "92fs-right"].includes(shapeSelect.value);
+    return ["left", "right"].includes(shapeSelect.value);
   }
 
   function updatePreviewFadeUI(){
@@ -4499,7 +4455,7 @@
   // ---- export: project.xml — position/size/rotation/stacking data for every layer, plus ----
   // ---- which background shape was used, so the zip can be re-loaded exactly as exported. ----
   function buildProjectXML(assetFilenames, fontFilesMap, zip){
-    const doc = document.implementation.createDocument(null, "gripCustomizerProject", null);
+    const doc = document.implementation.createDocument(null, "grip1911CustomizerProject", null);
     const root = doc.documentElement;
     root.setAttribute("version", "2");
     root.setAttribute("exportedAt", new Date().toISOString());
@@ -4846,7 +4802,7 @@
     projectZipDropzone.classList.add("dragover");
     JSZip.loadAsync(file).then((zip) => {
       const xmlEntry = zip.file("project.xml");
-      if (!xmlEntry) throw new Error("This zip doesn't contain a project.xml — it doesn't look like a Grip Customizer export.");
+      if (!xmlEntry) throw new Error("This zip doesn't contain a project.xml — it doesn't look like a 1911 Grip Customizer export.");
       return xmlEntry.async("string").then((xmlText) => {
         const doc = new DOMParser().parseFromString(xmlText, "application/xml");
         if (doc.querySelector("parsererror")) throw new Error("Couldn't parse project.xml in that zip.");
