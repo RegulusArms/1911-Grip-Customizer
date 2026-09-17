@@ -458,9 +458,13 @@
   };
   function detectProjectKind(file){
     return JSZip.loadAsync(file).then((zip) => {
-      const xmlEntry = zip.file("project.xml");
-      if (!xmlEntry) throw new Error("That zip doesn't contain a project.xml — it doesn't look like a 1911, 92FS, or PMAG Customizer export.");
-      return xmlEntry.async("string");
+      // a project.xml can either sit at the zip root (a single-side/legacy export) or be
+      // nested under a per-side folder like "left/project.xml" (a combined left+right
+      // export) — either one's root tag identifies the product, so the first one found is
+      // enough to route correctly.
+      const path = Object.keys(zip.files).find((p) => !zip.files[p].dir && (p === "project.xml" || p.endsWith("/project.xml")));
+      if (!path) throw new Error("That zip doesn't contain a project.xml — it doesn't look like a 1911, 92FS, or PMAG Customizer export.");
+      return zip.file(path).async("string");
     }).then((xmlText) => {
       const doc = new DOMParser().parseFromString(xmlText, "application/xml");
       if (doc.querySelector("parsererror")) throw new Error("Couldn't parse project.xml in that zip.");

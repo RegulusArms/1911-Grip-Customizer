@@ -681,12 +681,42 @@
     width:100%;
     padding:20px;
   }
+  .modal-box.modal-wide{
+    max-width:640px;
+  }
   .modal-message{
     margin:0 0 18px;
     font-size:13.5px;
     line-height:1.5;
     color:var(--text);
     white-space:pre-line;
+  }
+  .export-mockup-grid{
+    display:flex;
+    flex-wrap:wrap;
+    justify-content:center;
+    gap:16px;
+    margin:0 0 18px;
+  }
+  .export-mockup-item{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap:6px;
+  }
+  .export-mockup-item img{
+    display:block;
+    max-width:240px;
+    max-height:320px;
+    width:auto;
+    height:auto;
+    border-radius:8px;
+    border:1px solid var(--panel-border);
+    background:var(--stage-bg);
+  }
+  .export-mockup-label{
+    font-size:12px;
+    color:var(--muted);
   }
   .modal-actions{
     display:flex;
@@ -894,8 +924,8 @@
 
     <hr class="sep">
 
-    <button class="btn btn-primary" id="downloadZipBtn" disabled title="Downloads a zip containing the JPG mockup, the full quality PNG layers, a PNG of each individual layer, a project.xml with every layer's position/size/stacking data, your original uploaded images, and (for panels with print risk data) a reference JPG with the edge-fade/ridge/text-area/normal zones overlaid on your design — this zip can be re-loaded with &quot;Load project ZIP&quot; below">Download ZIP</button>
-    <p class="download-note">Download the zip for each side of the PMAG (left and right), then email them to ross@regulusarms.com with your GunBroker order number or square order number as the subject line.</p>
+    <button class="btn btn-primary" id="downloadZipBtn" disabled title="Downloads one zip with a subfolder for each side you've worked on (Left/Right) — each containing the JPG mockup, the full quality PNG layers, a PNG of each individual layer, a project.xml with every layer's position/size/stacking data, your original uploaded images, and (for panels with print risk data) a reference JPG with the edge-fade/ridge/text-area/normal zones overlaid on your design — this zip can be re-loaded with &quot;Load project ZIP&quot; below">Download ZIP</button>
+    <p class="download-note">Download the zip (it includes both the left and right panels), then email it to ross@regulusarms.com with your GunBroker order number or square order number as the subject line.</p>
 
     <hr class="sep">
 
@@ -974,6 +1004,7 @@
 <div class="modal-overlay" id="modalOverlay" style="display:none;">
   <div class="modal-box" id="modalBox" role="alertdialog" aria-modal="true" aria-labelledby="modalMessage">
     <p class="modal-message" id="modalMessage"></p>
+    <div id="modalExtra"></div>
     <div class="modal-actions">
       <button class="btn" id="modalCancelBtn" type="button">Cancel</button>
       <button class="btn btn-primary modal-ok-btn" id="modalOkBtn" type="button">OK</button>
@@ -1133,6 +1164,15 @@
   let currentShapeLabel = "";
   let dragSrcLi = null;
 
+  // ---- sides (left/right panel) ----
+  // each BUILTIN_SHAPES key is a fully independent editing session — its own layers and
+  // its own undo history — so working on one side never touches the other. `currentSideKey`
+  // says which session the live variables above (layers/selectedLayerId/levelView/
+  // historyStack/historyIndex) currently represent; `sides[key]` holds the *other*,
+  // currently-inactive side's saved session (see captureCurrentSide/activateSide below).
+  let currentSideKey = Object.keys(BUILTIN_SHAPES)[0];
+  let sides = {};
+
   // ---- history (undo/jump-to-state) ----
   // a capped stack of full-state snapshots (not diffs) — simplest way to guarantee any
   // entry can be restored exactly, at the cost of some memory; dataURL strings are shared
@@ -1154,7 +1194,7 @@
     const savedHistoryLimit = localStorage.getItem(HISTORY_LIMIT_KEY);
     if (savedHistoryLimit !== null) historyLimit = sanitizeHistoryLimit(savedHistoryLimit);
   }catch(e){ /* ignore */ }
-  let historyStack = [];       // [{ desc, thumbnail: dataURL|null, state:{shapeKey,levelView,layers,selectedLayerId} }]
+  let historyStack = [];       // [{ desc, thumbnail: dataURL|null, state:{levelView,layers,selectedLayerId} }] — for the *current* side only, see `sides`
   let historyIndex = -1;
   let historyBeforeSnapshot = null; // captured at the start of an in-progress drag/typing session
   let levelView = false;      // display-only: show the shape rotated so its bottom edge is level
@@ -1241,6 +1281,7 @@
   const modalOverlay = document.getElementById("modalOverlay");
   const modalBox = document.getElementById("modalBox");
   const modalMessage = document.getElementById("modalMessage");
+  const modalExtra = document.getElementById("modalExtra");
   const modalCancelBtn = document.getElementById("modalCancelBtn");
   const modalOkBtn = document.getElementById("modalOkBtn");
 
@@ -1326,7 +1367,6 @@
 
   function serializeState(){
     return {
-      shapeKey: shapeSelect.value,
       levelView: !!levelView,
       selectedLayerId,
       layers: layers.map(cloneLayerForHistory)
@@ -1339,10 +1379,6 @@
 
   // best-effort human description of what changed between two full-state snapshots
   function describeStateChange(before, after){
-    if (before.shapeKey !== after.shapeKey){
-      const shape = BUILTIN_SHAPES[after.shapeKey];
-      return `Changed panel to ${shape ? shape.label : after.shapeKey}`;
-    }
     const bIds = before.layers.map((l) => l.id);
     const aIds = after.layers.map((l) => l.id);
     if (aIds.length > bIds.length){
@@ -1469,21 +1505,14 @@
     pushHistoryEntry(desc, after);
   }
 
+  // restores a snapshot from the *current* side's own history — undo/redo never crosses
+  // sides (see switchToSide), so the background/shape is always already correct here.
   function restoreState(state){
-    const needsBgReload = shapeSelect.value !== state.shapeKey && BUILTIN_SHAPES[state.shapeKey];
     layers = state.layers.map(cloneLayerForHistory);
     selectedLayerId = state.selectedLayerId;
     levelView = !!state.levelView;
     levelViewCheckbox.checked = levelView;
-    if (needsBgReload){
-      const shape = BUILTIN_SHAPES[state.shapeKey];
-      shapeSelect.value = state.shapeKey;
-      currentShapeLabel = shape.label;
-      updatePreviewFadeUI();
-      parseAndLoadBackground(shape.svg); // this calls buildStage() itself
-    } else {
-      buildStage();
-    }
+    buildStage();
     renderLayerList();
     syncZoomSlider();
     syncRotationSlider();
@@ -1510,20 +1539,60 @@
     pushHistoryEntry(desc, serializeState());
   }
 
-  // updates the Start entry's own state instead of pushing a new one — used when the
-  // background shape changes while history is still sitting at Start (index 0), so idly
-  // trying out background panels before making any real edit doesn't clutter the history list.
-  // Any entries past Start are dropped too, since they no longer follow from this Start.
-  function updateStartEntry(){
-    historyStack = historyStack.slice(0, 1);
-    const entry = historyStack[0];
-    entry.state = serializeState();
-    entry.thumbnail = null;
-    rasterizeThumbnail((dataUrl) => {
-      entry.thumbnail = dataUrl;
+  // saves the live editing state (layers/history/etc.) into `sides[currentSideKey]` so it
+  // can be restored later by activateSide — call before switching away from a side, or
+  // before reading another side's layers (e.g. during export) without losing this one.
+  function captureCurrentSide(){
+    sides[currentSideKey] = { layers, selectedLayerId, levelView, historyStack, historyIndex };
+  }
+
+  // loads `key`'s saved session (or a blank one, if it's never been visited) into the live
+  // state and rebuilds the stage for it. Does NOT save whatever side is currently active —
+  // call captureCurrentSide() first if that matters (switchToSide does both).
+  function activateSide(key){
+    const shape = BUILTIN_SHAPES[key];
+    if (!shape) return;
+    const saved = sides[key];
+    currentSideKey = key;
+    layers = saved ? saved.layers : [];
+    selectedLayerId = saved ? saved.selectedLayerId : null;
+    levelView = saved ? !!saved.levelView : false;
+    levelViewCheckbox.checked = levelView;
+    currentShapeLabel = shape.label;
+    shapeSelect.value = key;
+    updatePreviewFadeUI();
+    historyBeforeSnapshot = null; // never carry a pending drag/typing snapshot across sides
+    parseAndLoadBackground(shape.svg); // rebuilds bg + calls buildStage() with `layers` above
+    layers.forEach((l) => updateLayerResolutionFlag(l));
+    renderLayerList();
+    updateControlsEnabled();
+    syncTextControls();
+    syncZoomSlider();
+    syncRotationSlider();
+    if (saved && saved.historyStack && saved.historyStack.length){
+      historyStack = saved.historyStack;
+      historyIndex = saved.historyIndex;
       renderHistoryPanel();
-    });
-    renderHistoryPanel();
+    } else {
+      // a side with imported layers but no saved history (e.g. an older single-side
+      // export) still needs a Start-like entry so undo has somewhere to land
+      resetHistoryForFreshLoad(layers.length ? "Loaded project" : "Start");
+    }
+  }
+
+  // switches the live editing session from the current side to `key`, saving the current
+  // side's layers/history first so flipping back later picks up exactly where it left off.
+  function switchToSide(key){
+    if (!BUILTIN_SHAPES[key] || key === currentSideKey) return;
+    captureCurrentSide();
+    activateSide(key);
+  }
+
+  // whether either side currently has any layers — used to enable Download/Save even when
+  // the *other* side (not the one on screen right now) is the one with content.
+  function anySideHasLayers(){
+    if (layers.length > 0) return true;
+    return Object.keys(BUILTIN_SHAPES).some((k) => k !== currentSideKey && sides[k] && sides[k].layers.length > 0);
   }
 
   function renderHistoryPanel(){
@@ -3356,7 +3425,6 @@
 
   function updateControlsEnabled(){
     const hasSelection = !!getSelectedLayer();
-    const hasLayers = layers.length > 0;
     fitBtn.disabled = !hasSelection;
     removeImgBtn.disabled = !hasSelection;
     zoomRange.disabled = !hasSelection;
@@ -3364,8 +3432,10 @@
     rotLeftBtn.disabled = !hasSelection;
     rotRightBtn.disabled = !hasSelection;
     opacityRange.disabled = !hasSelection;
-    downloadZipBtn.disabled = !hasLayers;
-    saveZipMenuBtn.disabled = !hasLayers;
+    // Download/Save stay enabled if *either* side has layers, not just the one on screen
+    const hasAnyLayers = anySideHasLayers();
+    downloadZipBtn.disabled = !hasAnyLayers;
+    saveZipMenuBtn.disabled = !hasAnyLayers;
   }
 
   // ---- layer list UI ----
@@ -4177,17 +4247,11 @@
   });
 
   // ---- events: shape select (built-in shapes) ----
+  // switching panels swaps to that side's own independent layers + history (see
+  // switchToSide) rather than recording a "changed panel" step in the current history —
+  // each side keeps its own timeline entirely separate from the other's.
   shapeSelect.addEventListener("change", () => {
-    const shape = BUILTIN_SHAPES[shapeSelect.value];
-    if (!shape) return;
-    currentShapeLabel = shape.label;
-    updatePreviewFadeUI();
-    parseAndLoadBackground(shape.svg);
-    // the panel's physical size (and so each image's effective print DPI) just changed
-    layers.forEach((l) => updateLayerResolutionFlag(l));
-    renderLayerList();
-    if (historyIndex === 0) updateStartEntry();
-    else recordHistory(`Changed panel to ${shape.label}`);
+    switchToSide(shapeSelect.value);
   });
 
   levelViewCheckbox.addEventListener("change", () => {
@@ -4354,11 +4418,12 @@
   window.addEventListener("scroll", updateHandles, true);
 
   // ---- shared export helpers ----
-  function buildExportFilename(ext, suffix){
+  const PRODUCT_LABEL = "PMAG 30";
+  function buildExportFilename(ext, suffix, labelOverride){
     const d = new Date();
     const pad = (n) => String(n).padStart(2, "0");
     const timestamp = `${d.getFullYear()}${pad(d.getMonth()+1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
-    const shapeSlug = (currentShapeLabel || "shape").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "");
+    const shapeSlug = (labelOverride || currentShapeLabel || "shape").replace(/[^a-z0-9]+/gi, "-").replace(/^-+|-+$/g, "");
     const suffixPart = suffix ? `-${suffix}` : "";
     return `${timestamp}-${shapeSlug}${suffixPart}.${ext}`;
   }
@@ -4728,8 +4793,11 @@
       entryEl.setAttribute("description", entry.desc || "");
       if (entry.state.selectedLayerId != null) entryEl.setAttribute("selectedLayerId", String(entry.state.selectedLayerId));
 
+      // every entry in this history belongs to the side being exported right now — see
+      // buildProjectXML/exportActiveSideIntoZip, which only ever call this while that
+      // side's own layers/historyStack are the live state.
       const bgEl = doc.createElement("background");
-      bgEl.setAttribute("shape", entry.state.shapeKey || "");
+      bgEl.setAttribute("shape", currentSideKey);
       bgEl.setAttribute("levelView", String(!!entry.state.levelView));
       entryEl.appendChild(bgEl);
 
@@ -4805,22 +4873,124 @@
     });
   }
 
-  // ---- export: zip containing the JPG mockup (in both normal and level views, when the ----
-  // ---- shape supports it), the full-layers PNG, a PNG of each individual layer,         ----
-  // ---- project.xml (position/size/stacking + background shape), and originals           ----
+  // renders the *currently active* side (see activateSide) into `sideZip` — the JPG
+  // mockup (normal + level view when supported), the print-risk-areas preview (when
+  // available), the full-layers PNG, a PNG of each individual layer, project.xml, and
+  // originals — same output a single-side export has always produced, just written into
+  // a zip (or zip subfolder) the caller supplies. Returns the clipped JPG mockup blob so
+  // exportZip can show it in the success dialog.
+  async function exportActiveSideIntoZip(sideZip){
+    const neededFamilies = new Set();
+    layers.forEach((l) => {
+      if (l.type !== "text") return;
+      const def = BUILTIN_FONTS.find((f) => f.value === l.fontFamily);
+      if (def && def.google) neededFamilies.add(def.google);
+    });
+    await Promise.all(Array.from(neededFamilies).map(ensureGoogleFontEmbedded));
+
+    const hasLevelView = !!bg.levelTransform;
+    const hasRiskZones = !!bg.riskZonesAvailable;
+    const [jpgBlob, pngBlob, levelJpgBlob, riskJpgBlob] = await Promise.all([
+      blobPromise(buildJPGBlob, false),
+      blobPromise(buildFullLayersPNGBlob, false),
+      hasLevelView ? blobPromise(buildJPGBlob, true) : Promise.resolve(null),
+      hasRiskZones ? blobPromise(buildRiskPreviewJPGBlob, false) : Promise.resolve(null)
+    ]);
+
+    const nonImageLayers = layers.filter((l) => l.type !== "image");
+    const rendered = await Promise.all(nonImageLayers.map((layer) => new Promise((resolve, reject) => {
+      buildSingleLayerPNGBlob(layer, (blob, err) => {
+        if (err) reject(new Error(err)); else resolve({ layer, blob });
+      });
+    })));
+
+    sideZip.file(buildExportFilename("jpg"), jpgBlob);
+    sideZip.file(buildExportFilename("png", "full-layers"), pngBlob);
+    if (levelJpgBlob) sideZip.file(buildExportFilename("jpg", "level-view"), levelJpgBlob);
+    if (riskJpgBlob) sideZip.file(buildExportFilename("jpg", "print-risk-areas"), riskJpgBlob);
+
+    const originalsFolder = sideZip.folder("original-images");
+    const usedNames = new Set();
+    const assetFilenames = new Map(); // layer.id -> filename inside original-images/
+
+    layers.forEach((layer) => {
+      if (layer.type !== "image") return;
+      const blob = dataURLtoBlob(layer.dataURL);
+      let name = layer.name || `layer.${extFromMime(blob.type)}`;
+      if (!/\.[a-z0-9]+$/i.test(name)) name += `.${extFromMime(blob.type)}`;
+      name = uniqueZipName(usedNames, name);
+      originalsFolder.file(name, blob);
+      assetFilenames.set(layer.id, name);
+    });
+    rendered.forEach(({ layer, blob }) => {
+      const name = uniqueZipName(usedNames, layerAssetBaseName(layer) + ".png");
+      originalsFolder.file(name, blob);
+      assetFilenames.set(layer.id, name);
+    });
+
+    // custom (uploaded, non-Google) fonts actually used by a text layer
+    const fontFilesMap = new Map(); // familyName -> { filename, label }
+    const usedFontNames = new Set();
+    let fontsFolder = null;
+    layers.forEach((layer) => {
+      if (layer.type !== "text") return;
+      const isBuiltin = BUILTIN_FONTS.some((f) => f.value === layer.fontFamily);
+      if (isBuiltin || fontFilesMap.has(layer.fontFamily)) return;
+      const faces = customFonts[layer.fontFamily];
+      if (!faces || !faces.length) return;
+      if (!fontsFolder) fontsFolder = sideZip.folder("fonts");
+      const label = customFontLabels[layer.fontFamily] || layer.fontFamily;
+      const blob = dataURLtoBlob(faces[0].dataURL);
+      const ext = /otf/i.test(blob.type) ? "otf" : "ttf";
+      const filename = uniqueZipName(usedFontNames, layer.fontFamily.replace(/[^a-z0-9-]+/gi, "_") + "." + ext);
+      fontsFolder.file(filename, blob);
+      fontFilesMap.set(layer.fontFamily, { filename, label });
+    });
+
+    sideZip.file("project.xml", buildProjectXML(assetFilenames, fontFilesMap, sideZip));
+
+    return { jpgBlob };
+  }
+
+  // ---- export: one zip with a subfolder per side that has any layers — each containing ----
+  // ---- that side's JPG mockup(s), full-layers PNG, per-layer PNGs, project.xml, and    ----
+  // ---- originals — so the customer only ever has one file to download and email.       ----
   async function exportZip(){
-    if (!layers.length || !bg){
+    captureCurrentSide();
+    const sideKeys = Object.keys(BUILTIN_SHAPES);
+    const originalSideKey = currentSideKey;
+
+    // refresh every side's print-resolution flags fresh (depends on each side's own
+    // physical panel size, so this briefly activates each one — pixelation itself doesn't
+    // need re-checking here since it's static once a layer's image content is set).
+    sideKeys.forEach((key) => {
+      activateSide(key);
+      layers.forEach((l) => updateLayerResolutionFlag(l));
+      renderLayerList();
+      captureCurrentSide();
+    });
+    activateSide(originalSideKey);
+
+    const sideHasContent = {};
+    sideKeys.forEach((key) => { sideHasContent[key] = !!(sides[key] && sides[key].layers.length); });
+    const sidesToExport = sideKeys.filter((key) => sideHasContent[key]);
+
+    if (!sidesToExport.length){
       showInfoModal("Add at least one image layer first.");
       return;
     }
 
-    // re-check every image layer's print resolution fresh (rather than trusting whatever
-    // was last flagged) since it depends on the layer's current on-canvas size; pixelation
-    // doesn't need re-checking here since it's a static property of the source pixels,
-    // already computed whenever the layer's image content last changed.
-    layers.forEach((l) => updateLayerResolutionFlag(l));
-    renderLayerList();
-    if (layers.some(layerHasQualityWarning)){
+    if (sidesToExport.length < sideKeys.length){
+      const missingLabels = sideKeys.filter((key) => !sideHasContent[key]).map((key) => BUILTIN_SHAPES[key].label);
+      const proceed = await showConfirmModal(
+        `You haven't added anything to the ${missingLabels.join(" / ")} panel yet, so it won't be included in the export. Continue with just the completed side?`,
+        "Continue anyway"
+      );
+      if (!proceed) return;
+    }
+
+    const anyQualityWarning = sidesToExport.some((key) => sides[key].layers.some(layerHasQualityWarning));
+    if (anyQualityWarning){
       const proceed = await showConfirmModal(
         "One or more images are below the recommended print resolution, have very little fine detail, or have hard/jagged edges at their current size, and may/will look blurry, soft, or jagged when printed. Continue with the export anyway?",
         "Continue anyway"
@@ -4832,97 +5002,65 @@
     downloadZipBtn.textContent = "Preparing…";
     saveZipMenuBtn.disabled = true;
 
-    // make sure every Google Font actually used by a text layer is embedded as a data URI
-    // before rasterizing — otherwise the isolated export context can't fetch it and the
-    // JPG/PNG would silently fall back to a generic font.
-    const neededFamilies = new Set();
-    layers.forEach((l) => {
-      if (l.type !== "text") return;
-      const def = BUILTIN_FONTS.find((f) => f.value === l.fontFamily);
-      if (def && def.google) neededFamilies.add(def.google);
-    });
+    try{
+      const zip = new JSZip();
+      const mockups = [];
+      for (const key of sidesToExport){
+        activateSide(key);
+        const { jpgBlob } = await exportActiveSideIntoZip(zip.folder(key));
+        mockups.push({ label: BUILTIN_SHAPES[key].label, jpgBlob });
+      }
+      activateSide(originalSideKey);
 
-    const hasLevelView = !!bg.levelTransform;
-    const hasRiskZones = !!bg.riskZonesAvailable;
-
-    Promise.all(Array.from(neededFamilies).map(ensureGoogleFontEmbedded)).then(() => {
-      return Promise.all([
-        blobPromise(buildJPGBlob, false),
-        blobPromise(buildFullLayersPNGBlob, false),
-        hasLevelView ? blobPromise(buildJPGBlob, true) : Promise.resolve(null),
-        hasRiskZones ? blobPromise(buildRiskPreviewJPGBlob, false) : Promise.resolve(null)
-      ]);
-    }).then(([jpgBlob, pngBlob, levelJpgBlob, riskJpgBlob]) => {
-      const nonImageLayers = layers.filter((l) => l.type !== "image");
-      return Promise.all(nonImageLayers.map((layer) => new Promise((resolve, reject) => {
-        buildSingleLayerPNGBlob(layer, (blob, err) => {
-          if (err) reject(new Error(err)); else resolve({ layer, blob });
-        });
-      }))).then((rendered) => {
-            const zip = new JSZip();
-            zip.file(buildExportFilename("jpg"), jpgBlob);
-            zip.file(buildExportFilename("png", "full-layers"), pngBlob);
-            if (levelJpgBlob) zip.file(buildExportFilename("jpg", "level-view"), levelJpgBlob);
-            if (riskJpgBlob) zip.file(buildExportFilename("jpg", "print-risk-areas"), riskJpgBlob);
-
-            const originalsFolder = zip.folder("original-images");
-            const usedNames = new Set();
-            const assetFilenames = new Map(); // layer.id -> filename inside original-images/
-
-            layers.forEach((layer) => {
-              if (layer.type !== "image") return;
-              const blob = dataURLtoBlob(layer.dataURL);
-              let name = layer.name || `layer.${extFromMime(blob.type)}`;
-              if (!/\.[a-z0-9]+$/i.test(name)) name += `.${extFromMime(blob.type)}`;
-              name = uniqueZipName(usedNames, name);
-              originalsFolder.file(name, blob);
-              assetFilenames.set(layer.id, name);
-            });
-            rendered.forEach(({ layer, blob }) => {
-              const name = uniqueZipName(usedNames, layerAssetBaseName(layer) + ".png");
-              originalsFolder.file(name, blob);
-              assetFilenames.set(layer.id, name);
-            });
-
-            // custom (uploaded, non-Google) fonts actually used by a text layer
-            const fontFilesMap = new Map(); // familyName -> { filename, label }
-            const usedFontNames = new Set();
-            let fontsFolder = null;
-            layers.forEach((layer) => {
-              if (layer.type !== "text") return;
-              const isBuiltin = BUILTIN_FONTS.some((f) => f.value === layer.fontFamily);
-              if (isBuiltin || fontFilesMap.has(layer.fontFamily)) return;
-              const faces = customFonts[layer.fontFamily];
-              if (!faces || !faces.length) return;
-              if (!fontsFolder) fontsFolder = zip.folder("fonts");
-              const label = customFontLabels[layer.fontFamily] || layer.fontFamily;
-              const blob = dataURLtoBlob(faces[0].dataURL);
-              const ext = /otf/i.test(blob.type) ? "otf" : "ttf";
-              const filename = uniqueZipName(usedFontNames, layer.fontFamily.replace(/[^a-z0-9-]+/gi, "_") + "." + ext);
-              fontsFolder.file(filename, blob);
-              fontFilesMap.set(layer.fontFamily, { filename, label });
-            });
-
-            zip.file("project.xml", buildProjectXML(assetFilenames, fontFilesMap, zip));
-
-            zip.generateAsync({ type: "blob" }).then((zipBlob) => {
-              triggerDownload(zipBlob, buildExportFilename("zip"));
-              resetDownloadZipBtn();
-            }).catch(() => {
-              alert("Export failed while creating the zip file.");
-              resetDownloadZipBtn();
-            });
-          });
-    }).catch((err) => {
+      const zipBlob = await zip.generateAsync({ type: "blob" });
+      triggerDownload(zipBlob, buildExportFilename("zip", null, PRODUCT_LABEL));
+      resetDownloadZipBtn();
+      showExportSuccessModal(mockups);
+    }catch(err){
+      activateSide(originalSideKey);
       alert(err && err.message ? err.message : "Export failed while rendering one of the layers.");
       resetDownloadZipBtn();
-    });
+    }
   }
 
   function resetDownloadZipBtn(){
-    downloadZipBtn.disabled = layers.length === 0;
+    const hasAnyLayers = anySideHasLayers();
+    downloadZipBtn.disabled = !hasAnyLayers;
     downloadZipBtn.textContent = "Download ZIP";
-    saveZipMenuBtn.disabled = layers.length === 0;
+    saveZipMenuBtn.disabled = !hasAnyLayers;
+  }
+
+  // ---- post-export: shows the exported mockup(s) so the user can see what they'll get ----
+  function showExportSuccessModal(mockups){
+    return queueModal(() => {
+      modalExtra.innerHTML = "";
+      const urls = mockups.map((m) => ({ label: m.label, url: URL.createObjectURL(m.jpgBlob) }));
+      const grid = document.createElement("div");
+      grid.className = "export-mockup-grid";
+      urls.forEach(({ label, url }) => {
+        const item = document.createElement("div");
+        item.className = "export-mockup-item";
+        const img = document.createElement("img");
+        img.src = url;
+        img.alt = label + " mockup";
+        const cap = document.createElement("div");
+        cap.className = "export-mockup-label";
+        cap.textContent = label;
+        item.appendChild(img);
+        item.appendChild(cap);
+        grid.appendChild(item);
+      });
+      modalExtra.appendChild(grid);
+      modalBox.classList.add("modal-wide");
+      const message = mockups.length > 1
+        ? "Export complete! Here's a preview of both mockups."
+        : "Export complete! Here's a preview of the mockup.";
+      return openModal(message, {}).then(() => {
+        modalBox.classList.remove("modal-wide");
+        modalExtra.innerHTML = "";
+        urls.forEach(({ url }) => URL.revokeObjectURL(url));
+      });
+    });
   }
 
   downloadZipBtn.addEventListener("click", exportZip);
@@ -5060,35 +5198,6 @@
     return Promise.resolve(null);
   }
 
-  function applyImportedProject(shapeValue, wantLevelView, newLayers, savedCounter){
-    const shape = BUILTIN_SHAPES[shapeValue] || BUILTIN_SHAPES.left;
-    currentShapeLabel = shape.label;
-    shapeSelect.value = BUILTIN_SHAPES[shapeValue] ? shapeValue : "left";
-    updatePreviewFadeUI();
-    parseAndLoadBackground(shape.svg);
-
-    levelView = !!wantLevelView && !levelViewCheckbox.disabled;
-    levelViewCheckbox.checked = levelView;
-
-    if (savedCounter != null) layerIdCounter = Math.max(layerIdCounter, savedCounter);
-    layers = newLayers.map((l) => {
-      if (l.id == null) l.id = ++layerIdCounter;
-      else layerIdCounter = Math.max(layerIdCounter, l.id);
-      if (bg) l.fitScale = Math.max(bg.clipBBoxRect.w/l.naturalW, bg.clipBBoxRect.h/l.naturalH) || 1;
-      return l;
-    });
-    selectedLayerId = layers.length ? layers[layers.length - 1].id : null;
-    layers.forEach((l) => updateLayerResolutionFlag(l));
-
-    renderLayerList();
-    buildStage();
-    setInitialView();
-    syncZoomSlider();
-    syncRotationSlider();
-    updateControlsEnabled();
-    syncTextControls();
-  }
-
   // parses a saved <history><entry> element back into a { desc, thumbnail, state } entry —
   // its layers' "file" attributes point into history-assets/ rather than original-images/,
   // but buildLayerFromXML doesn't need to know the difference (see its comment above).
@@ -5101,7 +5210,6 @@
         desc: entryEl.getAttribute("description") || "",
         thumbnail: thumbEl ? thumbEl.textContent : null,
         state: {
-          shapeKey: entryBgEl ? entryBgEl.getAttribute("shape") : "left",
           levelView: entryBgEl ? entryBgEl.getAttribute("levelView") === "true" : false,
           selectedLayerId: entryEl.hasAttribute("selectedLayerId") ? parseInt(entryEl.getAttribute("selectedLayerId"), 10) : null,
           layers: entryLayers.filter(Boolean)
@@ -5109,50 +5217,96 @@
       }));
   }
 
+  // parses one side's already-loaded project.xml document into raw layer/history data —
+  // `sideZip` must resolve each layer's "file" path correctly on its own, so it's either
+  // the zip root (single-side/legacy export) or zip.folder(sideKey) (one side of a
+  // combined multi-side export) — see importProjectZip.
+  function parseProjectXMLDoc(doc, sideZip){
+    const root = doc.documentElement;
+    const bgEl = root.querySelector(":scope > background");
+    const shapeValue = bgEl ? bgEl.getAttribute("shape") : null;
+    const wantLevelView = bgEl ? bgEl.getAttribute("levelView") === "true" : false;
+    const savedCounterAttr = root.getAttribute("layerIdCounter");
+    const savedCounter = savedCounterAttr != null ? parseInt(savedCounterAttr, 10) : null;
+    const layerEls = Array.from(root.querySelectorAll(":scope > layers > layer"));
+    const fontImportCache = new Map();
+
+    const layersPromise = Promise.all(layerEls.map((el) => buildLayerFromXML(el, sideZip, fontImportCache)))
+      .then((newLayers) => newLayers.filter(Boolean));
+
+    const historyEl = root.querySelector(":scope > history");
+    const historyPromise = historyEl
+      ? Promise.all(Array.from(historyEl.querySelectorAll(":scope > entry")).map((entryEl) => buildHistoryEntryFromXML(entryEl, sideZip, fontImportCache)))
+        .then((entries) => ({
+          entries,
+          currentIndex: historyEl.hasAttribute("currentIndex") ? parseInt(historyEl.getAttribute("currentIndex"), 10) : entries.length - 1
+        }))
+      : Promise.resolve(null);
+
+    return Promise.all([layersPromise, historyPromise]).then(([newLayers, historyData]) => ({
+      shapeValue, wantLevelView, newLayers, savedCounter, historyData
+    }));
+  }
+
+  function readProjectXML(sideZip, missingMessage){
+    const xmlEntry = sideZip.file("project.xml");
+    if (!xmlEntry) return Promise.reject(new Error(missingMessage));
+    return xmlEntry.async("string").then((xmlText) => {
+      const doc = new DOMParser().parseFromString(xmlText, "application/xml");
+      if (doc.querySelector("parsererror")) throw new Error("Couldn't parse project.xml in that zip.");
+      return parseProjectXMLDoc(doc, sideZip);
+    });
+  }
+
+  // turns one side's parsed project.xml payload into the { layers, selectedLayerId,
+  // levelView, historyStack, historyIndex } shape `sides` holds — a null historyStack
+  // means "no saved history", which activateSide falls back to a single Start-like entry
+  // for (see its comment).
+  function sideStateFromParsed({ newLayers, savedCounter, historyData, wantLevelView }){
+    if (savedCounter != null) layerIdCounter = Math.max(layerIdCounter, savedCounter);
+    const resolvedLayers = newLayers.map((l) => {
+      if (l.id == null) l.id = ++layerIdCounter;
+      else layerIdCounter = Math.max(layerIdCounter, l.id);
+      return l;
+    });
+    const hasHistory = historyData && historyData.entries.length;
+    return {
+      layers: resolvedLayers,
+      selectedLayerId: resolvedLayers.length ? resolvedLayers[resolvedLayers.length - 1].id : null,
+      levelView: !!wantLevelView,
+      historyStack: hasHistory ? historyData.entries : null,
+      historyIndex: hasHistory ? Math.max(0, Math.min(historyData.currentIndex, historyData.entries.length - 1)) : -1
+    };
+  }
+
   function importProjectZip(file){
     if (!file) return;
-    if (layers.length && !confirm("Loading this project will replace your current layers. Continue?")) return;
+    if (anySideHasLayers() && !confirm("Loading this project will replace your current layers on both sides. Continue?")) return;
     projectZipDropzone.classList.add("dragover");
+    const sideKeys = Object.keys(BUILTIN_SHAPES);
+
     JSZip.loadAsync(file).then((zip) => {
-      const xmlEntry = zip.file("project.xml");
-      if (!xmlEntry) throw new Error("This zip doesn't contain a project.xml — it doesn't look like a PMAG 30 Customizer export.");
-      return xmlEntry.async("string").then((xmlText) => {
-        const doc = new DOMParser().parseFromString(xmlText, "application/xml");
-        if (doc.querySelector("parsererror")) throw new Error("Couldn't parse project.xml in that zip.");
-        const root = doc.documentElement;
-        const bgEl = root.querySelector(":scope > background");
-        const shapeValue = bgEl ? bgEl.getAttribute("shape") : null;
-        const wantLevelView = bgEl ? bgEl.getAttribute("levelView") === "true" : false;
-        const savedCounterAttr = root.getAttribute("layerIdCounter");
-        const savedCounter = savedCounterAttr != null ? parseInt(savedCounterAttr, 10) : null;
-        const layerEls = Array.from(root.querySelectorAll(":scope > layers > layer"));
-        const fontImportCache = new Map();
+      const combinedKeys = sideKeys.filter((key) => !!zip.file(key + "/project.xml"));
 
-        const layersPromise = Promise.all(layerEls.map((el) => buildLayerFromXML(el, zip, fontImportCache)))
-          .then((newLayers) => newLayers.filter(Boolean));
-
-        const historyEl = root.querySelector(":scope > history");
-        const historyPromise = historyEl
-          ? Promise.all(Array.from(historyEl.querySelectorAll(":scope > entry")).map((entryEl) => buildHistoryEntryFromXML(entryEl, zip, fontImportCache)))
-            .then((entries) => ({
-              entries,
-              currentIndex: historyEl.hasAttribute("currentIndex") ? parseInt(historyEl.getAttribute("currentIndex"), 10) : entries.length - 1
-            }))
-          : Promise.resolve(null);
-
-        return Promise.all([layersPromise, historyPromise]).then(([newLayers, historyData]) => ({
-          shapeValue, wantLevelView, newLayers, savedCounter, historyData
-        }));
-      });
-    }).then(({ shapeValue, wantLevelView, newLayers, savedCounter, historyData }) => {
-      applyImportedProject(shapeValue, wantLevelView, newLayers, savedCounter);
-      if (historyData && historyData.entries.length){
-        historyStack = historyData.entries;
-        historyIndex = Math.max(0, Math.min(historyData.currentIndex, historyStack.length - 1));
-        renderHistoryPanel();
-      } else {
-        resetHistoryForFreshLoad("Loaded project");
+      if (combinedKeys.length){
+        return Promise.all(combinedKeys.map((key) =>
+          readProjectXML(zip.folder(key), `Missing project.xml for the ${BUILTIN_SHAPES[key].label} panel.`)
+            .then((parsed) => [key, sideStateFromParsed(parsed)])
+        )).then((entries) => {
+          sides = {};
+          entries.forEach(([key, state]) => { sides[key] = state; });
+          const firstKey = entries.length ? entries[0][0] : sideKeys[0];
+          activateSide(firstKey);
+        });
       }
+
+      return readProjectXML(zip, "This zip doesn't contain a project.xml — it doesn't look like a PMAG 30 Customizer export.")
+        .then((parsed) => {
+          const targetKey = BUILTIN_SHAPES[parsed.shapeValue] ? parsed.shapeValue : currentSideKey;
+          sides = {};
+          sides[targetKey] = sideStateFromParsed(parsed);
+          activateSide(targetKey);
+        });
     }).catch((err) => {
       console.error(err);
       alert("Couldn't load that project zip. " + (err && err.message ? err.message : ""));
