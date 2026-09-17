@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <!--
 ==============================================================================
-
+ 
  What the hell did you just say about viewing my source code, you little script
  kiddie? I'll have you know I graduated somewhere around the middle of my
  engineering class, I've participated in numerous production deployments, and I
@@ -48,13 +48,13 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PMAG 30 Customizer</title>
+<title>92FS Grip Customizer</title>
 <script>
   // set the theme before first paint so there's no flash of the wrong palette
   (function(){
     var theme = "dark";
     try{
-      var saved = localStorage.getItem("pmag30CustomizerTheme");
+      var saved = localStorage.getItem("grip92fsCustomizerTheme");
       if (saved === "light" || saved === "dark") theme = saved;
     }catch(e){ /* ignore */ }
     document.documentElement.setAttribute("data-theme", theme);
@@ -776,13 +776,13 @@
 </div>
 <div class="app">
   <aside class="panel">
-    <h1>PMAG 30 Customizer</h1>
+    <h1>92FS Grip Customizer</h1>
 
     <div class="field">
-      <label for="shapeSelect">Background shape</label>
+      <label for="shapeSelect">92FS Panel Selector</label>
       <select id="shapeSelect" style="width:100%;padding:7px 8px;font-size:13px;border-radius:8px;border:1px solid var(--panel-border);">
-        <option value="left">PMAG 30 LEFT 5.56 AR-15</option>
-        <option value="right">PMAG 30 RIGHT 5.56 AR-15</option>
+        <option value="92fs-left">92FS Left</option>
+        <option value="92fs-right">92FS Right</option>
       </select>
       <div class="checkbox-row" style="margin-top:8px;">
         <input type="checkbox" id="levelViewCheckbox">
@@ -791,11 +791,9 @@
       <div class="btn-row" style="margin-top:8px;">
         <button class="btn" id="previewFadeBtn" type="button">Preview edge fade</button>
         <button class="btn" id="previewCmykBtn" type="button">Preview CMYK colors</button>
-        <button class="btn" id="previewRiskBtn" type="button">Preview print risk areas</button>
       </div>
-      <p class="hint" id="previewFadeHint" style="display:none;margin:6px 0 0;text-align:left;">Simulated preview only — shows how the outer edges fade and shift color when printed. Not included in exports.</p>
+      <p class="hint" id="previewFadeHint" style="display:none;margin:6px 0 0;text-align:left;">Simulated preview only (92FS grips) — shows how the ~2-3mm curved outer edges fade and shift color when printed. Not included in exports.</p>
       <p class="hint" id="previewCmykHint" style="display:none;margin:6px 0 0;text-align:left;">Simulated preview only — approximates how uploaded photos shift toward printable CMYK colors (shape/text fills are already exact CMYK, so they're unaffected). Not included in exports.</p>
-      <div id="previewRiskLegend" style="display:none;margin:8px 0 0;"></div>
     </div>
 
     <hr class="sep">
@@ -938,7 +936,7 @@
 
     <hr class="sep">
 
-    <button class="btn btn-primary" id="downloadZipBtn" disabled title="Downloads one zip with a subfolder for each side you've worked on (Left/Right) — each containing the JPG mockup, the full quality PNG layers, a PNG of each individual layer, a project.xml with every layer's position/size/stacking data, your original uploaded images, and (for panels with print risk data) a reference JPG with the edge-fade/ridge/text-area/normal zones overlaid on your design — this zip can be re-loaded with &quot;Load project ZIP&quot; below">Download ZIP</button>
+    <button class="btn btn-primary" id="downloadZipBtn" disabled title="Downloads one zip with a subfolder for each side you've worked on (Left/Right) — each containing the JPG mockup, the full quality PNG layers, a PNG of each individual layer, a project.xml with every layer's position/size/stacking data, and your original uploaded images — this zip can be re-loaded with &quot;Load project ZIP&quot; below">Download ZIP</button>
     <p class="download-note">Download the zip (it includes both the left and right panels), then email it to ross@regulusarms.com with your GunBroker order number or square order number as the subject line.</p>
 
     <hr class="sep">
@@ -1033,108 +1031,53 @@
   const NS = "http://www.w3.org/2000/svg";
   const XLINK = "http://www.w3.org/1999/xlink";
 
-  // Plain single-path magazine-panel silhouettes (no screw holes or inset "face" sub-region) —
-  // the edge-fade preview (appendEdgeFadeDefs) falls back to its generic stroked-outline
-  // approximation for shapes like these, which is exactly the case that fallback path
-  // is designed for.
-  const SVG_LEFT = `<?xml version="1.0" encoding="UTF-8"?>
-<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 234.57 584.12">
+  const SVG_92FS_LEFT = `<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 209.85 451.69">
   <defs>
     <style>
-      .cls-1 {
-        fill: #58595b;
-      }
-
-      .cls-1, .cls-2, .cls-3, .cls-4, .cls-5 {
-        stroke: #231f20;
-        stroke-miterlimit: 10;
-      }
-
-      .cls-2 {
-        fill: #231f20;
-      }
-
-      .cls-3 {
-        fill: #414042;
-      }
-
-      .cls-4 {
-        fill: #a7a9ac;
-      }
-
-      .cls-5 {
-        fill: #808285;
+      .cls-edge {
+        fill: #e3dac9;
       }
     </style>
   </defs>
-  <path class="cls-4" d="M197.95,578.14c-.3.63-1.77,3.52-5.25,4.85-3.31,1.27-6.19.26-6.88,0-51.24-9.71-102.47-19.42-153.71-29.12l-31.55-12.13v-9.71c8.24-38.43,15.5-80.35,20.84-125.45,3.57-30.15,5.98-59.04,7.47-86.51,1.08-32.36,2.16-64.72,3.24-97.08,1.35-3.24,2.7-6.47,4.04-9.71-4.92-60.72-9.83-121.45-14.75-182.17,11.55-3.06,23.81-5.94,36.73-8.51,18.72-3.72,36.45-6.33,52.97-8.12l13.22-7.5L206.04.52c1.02,1.66,2.23,4.02,3.02,7.04,1.2,4.61.85,8.55.45,10.89,1.81.49,3.62.99,5.43,1.48.62,5.89,1.24,11.79,1.86,17.68l4.62,1.73c4.61,46.51,8.13,95.21,10.18,145.97,1.08,26.61,1.71,52.66,1.95,78.12-1.2,42.39-3.91,87.41-8.66,134.71-6.52,64.94-15.99,125.11-26.93,179.98Z"/>
-  <path class="cls-2" d="M17.89,501.7c3.61-22.63,7.11-45.57,10.47-68.83,3.22-22.26,6.24-44.29,9.07-66.06,2.14-24.68,3.69-50.77,4.41-78.16.62-23.67.57-46.39,0-68.08-1.89-2.43-3.79-4.85-5.68-7.28l-4.04,9.71c-.86,22.87-1.82,45.9-2.88,69.08-1.17,25.55-2.44,50.9-3.82,76.05-8.28,54.64-16.57,109.27-24.85,163.91,3.67,1.03,7.35,2.05,11.02,3.08l6.3-33.41Z"/>
-  <path class="cls-2" d="M185.82,582.99c9.82-38.17,18.55-81.76,24.13-130.11,3.62-31.38,5.46-60.94,6.09-88.36,4.42-47.77,7.07-100.31,6.59-156.93-.58-69.4-5.75-132.82-13.11-189.14,1.81.49,3.62.99,5.43,1.48l1.86,17.68,4.62,1.73c6.24,49.44,10.68,103.04,12.13,160.33.72,28.22.67,55.5,0,81.76-1.95,44.17-5.5,91.21-11.23,140.71-6.45,55.73-14.87,107.83-24.37,155.98-1.75,1.62-3.5,3.24-5.25,4.85h-6.88Z"/>
-  <polygon class="cls-2" points=".56 532.03 187.86 574.92 199.3 571.25 197.95 578.14 192.7 582.99 185.82 582.99 32.11 553.87 .56 541.74 .56 532.03"/>
-  <path class="cls-1" d="M78.22,228.04l77.15,7.25,11.21-7.25h15.83l7.25,7.25,32.9,5.29h10.68v18.45c-3.67-.35-7.33-.71-11-1.06-9.98-.97-19.96-1.93-29.94-2.9-1.89-.03-5.5.19-7.98,2.67-2.48,2.49-2.6,6.02-2.66,7.59-.28,7.34-1.36,22.53-2.71,42.95-.18.8-.89,4.26,1.12,7.83,1.89,3.36,4.94,4.6,5.75,4.9,11.12,1.33,22.24,2.66,33.36,3.99h11.61l-.8,16.41h-12l-32.18-3.26c-.95.16-3.55.74-5.75,3-2.93,3.02-2.95,6.78-2.94,7.55-1.54,14.29-3.08,28.57-4.62,42.86-.18,1.02-.65,4.41,1.29,7.91,1.5,2.7,3.66,4.07,4.64,4.62,11.9.92,23.79,1.85,35.69,2.77h9.86l-1.67,15.29-9.59,3.03-32.31-4.62c-1.16.15-4.55.72-7.52,3.55-2.53,2.41-3.4,5.16-3.69,6.34-1.6,12.79-3.2,25.59-4.8,38.38-.25.79-1.87,6.2,1.34,10.96,1.57,2.32,3.62,3.51,4.78,4.07,10.55,1.1,21.1,2.2,31.65,3.3h11.52l-2.54,16.55-8.92,2.7-146.45-21.23c-1.29.12-3.48.51-5.66,1.99-4.67,3.16-5.29,8.6-5.38,9.48-1.81,9.14-3.62,18.29-5.44,27.43l-14.51-3.3,4.62-27.69c.36-1.01,1.33-4.17.14-7.93-1.3-4.08-4.29-6.16-5.14-6.71-4.32-1.01-8.64-2.01-12.97-3.02l2.43-14.71,10.23.91c.48.16,3.89,1.21,7.25-.85,3.33-2.05,3.95-5.54,4.03-6.04,1.86-13.87,3.73-27.73,5.59-41.6.21-.9.92-4.51-1.12-8.27-2.18-4.04-5.94-5.37-6.76-5.64-3.64-.59-7.28-1.17-10.92-1.76.66-5.38,1.32-10.76,1.98-16.14l10.97,2.84c1.13-.27,3.94-1.09,6.28-3.67,3.29-3.64,3.18-8.03,3.13-8.95,1.33-13.12,2.67-26.23,4-39.35.05-.88.13-3.96-1.99-6.94-2.15-3.01-5.13-3.94-5.98-4.17-3.9-.35-7.8-.69-11.7-1.04l-.25-14.96,12.64.78c.54,0,3.69,0,6.18-2.53,2.43-2.48,2.42-5.54,2.41-6.09.22-15.39.44-30.77.66-46.16.07-.45.52-3.8-1.96-6.57-2.46-2.75-5.83-2.68-6.28-2.67l-10.9-.08c.22-5.64.44-11.28.65-16.92,3.3-.16,6.6-.32,9.9-.48.84.18,3.61.68,6.19-.88,3.12-1.89,4.68-6.02,3.72-10.24l-1.32-17.56h18.46v21.1c-.12.35-1.36,4.41,1.32,7.91,2.92,3.82,7.69,3.32,7.91,3.3Z"/>
-  <path class="cls-4" d="M68.25,252.38c.08-.76.4-2.77,2.01-4.47,2.75-2.91,6.79-2.29,7.16-2.23,25.2,1.93,50.39,3.87,75.59,5.8,1.7.41,4.39,1.33,6.71,3.58,2.89,2.8,4.22,6.17,4.22,8.58v41.54c.01.47.09,6.58-4.9,10.03-3.07,2.12-6.65,1.96-8.29,1.84-8.3-.61-36.67-3.37-75.11-7.61-.85-.07-3.89-.44-6.28-2.95-3.55-3.73-2.45-8.81-2.36-9.22.41-14.97.83-29.93,1.24-44.9Z"/>
-  <path class="cls-4" d="M64.22,334.67c.09-.73.63-4.32,3.81-6.71,2.85-2.15,6.76-2.52,10.19-1.02,22.64,2.31,45.28,4.62,67.92,6.92.8.02,7.29.25,11.34,5.72,3.08,4.16,2.79,8.67,2.68,9.84-1.12,14.09-2.24,28.18-3.35,42.27-.8,1.47-2.37,3.86-5.14,5.59-2.86,1.79-6.05,2.3-9.48,2.19-7.31-.23-33.98-3.85-69.89-9.89-.68,0-4.73,0-7.84-3.25-2.65-2.78-2.88-6.09-2.91-6.93.89-14.91,1.78-29.82,2.68-44.73Z"/>
-  <path class="cls-4" d="M58.23,412.29c.47-.96,1.44-2.64,3.31-4.05,2.85-2.14,5.89-2.25,6.93-2.24,34.96,3.6,61.07,7.17,71.07,9.29,2.75.58,8.01,1.85,10.56,6.14,2.06,3.46,1.41,7.32,1.12,9.17-1.31,8.28-2.49,20.16-3.8,36.23-.17,3.59-1.02,10.55-5.88,13.55-3.61,2.23-7.86,1.28-9.9.86-13.92-2.93-64.58-11.32-67.92-11.87-2.21-.36-6.66-1.05-9.55-4.55-3.8-4.6-2.62-11.31-1.84-15.88,1.85-10.74,3.69-22.33,5.91-36.66Z"/>
-  <path class="cls-1" d="M24.19,51.33l37.79-1.57-4.03,8.72-33.77,6.71v-13.87Z"/>
-  <path class="cls-1" d="M36.05,187.3s28.4-6.04,29.52-6.26,3.35-10.96,3.35-10.96l-36.19.89,1.32,16.33h1.99Z"/>
-  <path class="cls-3" d="M151.66,89.58l28.18-2.01c.27-.05,3.94-.71,6.21,1.81.94,1.04,1.27,2.21,1.39,2.89v10.73c.09.19.86,1.87,0,3.45-.82,1.5-2.78,2.26-4.7,1.7-9.69.82-19.38,1.64-29.07,2.46-.59.05-2.39.12-4.15-1.04-1.18-.78-1.82-1.77-2.11-2.32l-1.12-11.63c.13-.7.51-2.22,1.76-3.67,1.34-1.56,2.93-2.15,3.61-2.36Z"/>
-  <path class="cls-5" d="M150.1,112.16v11.85l2.24,1.57h30.6c2.03.48,3.9-.33,4.51-1.7.43-.96.14-1.94,0-2.32v-13.87l-33.77,2.91-3.58,1.57Z"/>
-  <circle class="cls-5" cx="171.57" cy="158.9" r="9.39"/>
-  <circle class="cls-5" cx="174.25" cy="182.01" r="9.39"/>
-  <rect class="cls-5" x="157.03" y="132.74" width="26.61" height="13.19"/>
-  <path class="cls-5" d="M179.17,22.26l-65.97,6.71c-.79.46-1.66.93-2.62,1.37-.48.22-.95.42-1.41.6-5.51.47-12.3,1.55-19.79,3.92-5.21,1.65-9.73,3.6-13.53,5.51,3.79,1.29,8.33,2.53,13.53,3.34,6.98,1.1,16.14,1.26,19.35.68.4-.07,1.94-.38,3.96-.16.91.1,1.65.27,2.12.4,22.05-1.35,44.1-2.69,66.15-4.04l-1.79-18.34Z"/>
-  <path class="cls-5" d="M63.11,502.85l-2.46,11.41c-.13.3-.87,2.1,0,4.03,1.12,2.49,3.87,2.89,4.03,2.91,34.89,5.96,69.77,11.93,104.66,17.89.34.14,2.2.89,4.25,0,2.52-1.1,3.08-3.73,3.13-3.97.75-3.67,1.49-7.34,2.24-11-.17-.73-.5-1.69-1.12-2.7-1.17-1.89-2.74-2.9-3.58-3.35l-104.21-18.11c-.29-.13-2.18-.94-4.25,0-1.9.87-2.56,2.58-2.68,2.91Z"/>
+  <path class="cls-edge" fill-rule="evenodd" clip-rule="evenodd" d="M.5,409.52v-235.4c.58-.26,13.6-6.45,15.04-20.35,1.09-10.53-4.93-20.93-15.04-25.66V20.14c.16-1.4.74-4.91,3.54-7.96,4.71-5.14,11.58-4.51,12.39-4.42,13.57,3.24,27.14,6.49,40.71,9.73,1.5-.59,4.03-1.85,6.19-4.42,4.24-5.04,3.68-11.13,3.54-12.39,47.49,12.39,94.99,24.78,142.48,37.17v44.25c-7.75,3.43-19.55,9.8-30.97,21.24-13.18,13.2-19.79,27.08-23.01,35.4-1.95,13.99-2.11,25.74-1.77,34.51.3,7.81,1.71,18.18,4.51,38.59,2.8,20.4,3.26,21.85,4.67,33.53,1.84,15.18,1.54,16.65,3.28,33.05,2.19,20.59,3.15,22.93,6.48,50.14,2.69,21.93,4.03,32.9,4.07,39.37.07,11.03.08,29-7.08,50.44-4.59,13.76-10.64,24.72-15.93,32.74-51.03-13.86-102.06-27.73-153.1-41.59Z M90.2,64.12A14.01,14.01 0 1,0 62.18,64.12A14.01,14.01 0 1,0 90.2,64.12Z M90.2,360.6A14.01,14.01 0 1,0 62.18,360.6A14.01,14.01 0 1,0 90.2,360.6Z"/>
+  <path data-role="edge-face" d="M12,123.68V18.37c9.42,2.08,21.08,3.76,34.47,3.73,7.8-.02,14.92-.61,21.24-1.48,12.4,3.68,24.81,7.35,37.21,11.03l6.19-9.73,80.53,22.12c1.81,2.92,4.67,8.39,5.51,15.84,1.03,9.14-1.55,16.28-2.97,19.52-13.86,9.91-27.72,19.83-41.58,29.74-2.12,3.48-4.59,8.32-6.38,14.4-1.52,5.14-2.13,9.75-2.36,13.41-1.24,5.83-2.27,12.59-2.74,20.12-.63,10.26-.03,19.33.97,26.78,7.37,64.9,14.75,129.79,22.12,194.69-.42,7.85-1.98,19.61-7.38,32.78-5.8,14.14-13.66,24.09-19.16,30.06-23.22-8.89-49.73-17.36-79.31-24.11-14.85-3.39-29.11-6.03-42.67-8.08-1.23-77.81-2.45-155.62-3.68-233.43,10.8-4.32,17.85-14.86,17.7-26.41-.15-11.29-7.15-21.45-17.7-25.66Z"/>
+  <path data-role="fade-extra" d="M104.92,31.64l6.19-9.73,46.22,83.84c-1.58,1.13-3.16,2.26-4.74,3.39-2.09-1.32-5.02-3.39-8.08-6.4-1.24-1.22-4.3-4.36-7.42-9.37-4.34-6.96-16.58-30.02-32.18-61.73Z"/>
+  <circle data-role="hole-fade-ring" cx="76.19" cy="64.12" r="16.66"/>
+  <circle data-role="hole-fade-ring" cx="76.19" cy="360.6" r="16.66"/>
 </svg>`;
 
-  const SVG_RIGHT = `<?xml version="1.0" encoding="UTF-8"?>
-<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 227.63 585.07">
+  // Like the 1911 shapes: the two screw holes are cut into the edge path at their true
+  // (smaller) radius, the inset face path is kept only as an invisible `edge-face`
+  // reference, and `hole-fade-ring` markers give each hole's outer fade-ring radius. This
+  // panel's reference art also has a small extra dark sliver (a bevel/groove line near the
+  // top, separate from the main silhouette) that's part of the fade family but not itself a
+  // hole or the outer edge — kept as an invisible `data-role="fade-extra"` reference so
+  // appendEdgeFadeDefs can add it back into the fade mask alongside the perimeter/hole rings
+  // (it would otherwise fall inside the face region and get masked out with the rest of it).
+  const SVG_92FS_RIGHT = `<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" data-name="Layer 1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 257.64 550.78">
   <defs>
     <style>
-      .cls-1 {
-        fill: #58595b;
-      }
-
-      .cls-1, .cls-2, .cls-3, .cls-4, .cls-5 {
-        stroke: #231f20;
-        stroke-miterlimit: 10;
-      }
-
-      .cls-2 {
-        fill: #231f20;
-      }
-
-      .cls-3 {
-        fill: #939598;
-      }
-
-      .cls-4 {
-        fill: #a7a9ac;
-      }
-
-      .cls-5 {
-        fill: #bcbec0;
+      .cls-edge {
+        fill: #e3dac9;
       }
     </style>
   </defs>
-  <path class="cls-4" d="M40.49,584.41l148.67-25.66,35.4-10.62c.5-.51,2.29-2.42,2.54-5.47.28-3.39-1.52-5.75-1.92-6.25-8.8-54.56-15.95-114.33-20.02-178.73-3.03-47.92-4.04-93.4-3.61-136.09-1.18-2.36-2.36-4.72-3.54-7.08l19.47-181.42c-11.92-3.67-24.86-7.15-38.76-10.2-18.1-3.98-35.08-6.64-50.62-8.38-2.65-1.79-5.31-3.58-7.96-5.37-3.17-.78-6.34-1.55-9.52-2.33C84.39,4.72,58.17,2.63,31.94.54l-2.07,15.74c-.28-.07-2.54-.58-4.22.89-.66.58-1,1.26-1.17,1.71-.35.6-.85,1.55-1.26,2.79-.23.7-.44,1.52-.9,5.57-.2,1.77-.3,2.66-.36,3.5-.13,1.98-.13,3.64-.09,4.85-1.17.15-2.34.3-3.5.45-.6,9.34-1.19,18.69-1.79,28.03-1.41,9.15-3.18,21.28-4.95,35.59-2.78,22.34-4.25,39.23-5.08,48.85-3.88,45.06-5.37,90.36-5.9,109.36.58,40.86,2.12,83.41,4.84,127.52,3.28,53.18,8.01,103.95,13.74,152.13l6.19,6.19,2.65,31.86c.12.65,1.07,5.39,5.54,7.77,2.98,1.59,5.85,1.24,6.85,1.08Z"/>
-  <path class="cls-2" d="M37.46,574.82c-6.55-34.72-12.33-72.08-16.78-111.86-3.8-34.02-6.26-66.48-7.69-97.18-1.71-27.42-3.25-67.89-1.4-117.11.92-24.59,2.36-42.58,4.54-69.22,3.5-42.75,8.09-97.93,13.74-163.17h-2.47l-2.92,2.59-1.26,2.79-.9,5.57-.36,3.5-.11,3.3-3.48,2c-4.25,32.87-7.97,67.16-10.96,102.77-3.33,39.65-5.51,77.83-6.76,114.41-.59,43.79.37,90.9,3.59,140.88,3.3,51.22,8.58,99.15,14.99,143.42l6.19,6.19,2.65,31.86c3.12-.25,6.24-.5,9.37-.75Z"/>
-  <path class="cls-2" d="M198.01,214.5l3.54,7.08c-.11,28.52.35,58.09,1.49,88.65,1.06,28.28,2.64,55.67,4.63,82.11,1.34,16.36,2.93,33.03,4.78,50,3.56,32.6,7.87,63.97,12.72,94.07l-6.98,3.8c-4.09-24.04-7.84-49.04-11.15-74.96-3.87-30.39-6.83-59.72-9.04-87.89-.76-33.35-1.45-59.94-2.24-83.67-.54-16.2-1.34-38.05,1.13-67.55.41-4.87.82-8.9,1.11-11.64Z"/>
-  <path class="cls-1" d="M174.86,48.48c1.6,0,40.5,4.26,40.5,4.26l-1.28,11.89-29.62-4.41-9.61-11.74Z"/>
-  <polygon class="cls-1" points="166.32 170.17 202.47 172.88 200.75 188.94 166.32 181.91 166.32 170.17"/>
-  <path class="cls-1" d="M11.97,239.55h36.39c.99-.72,2.73-2.18,3.98-4.62.9-1.75,1.23-3.37,1.35-4.45,5.57-.36,11.14-.72,16.71-1.08,1.12,1.89,2.25,3.78,3.37,5.66,27.11-1.71,54.22-3.41,81.33-5.12.89.12,5.15.6,9.01-2.29,2.97-2.23,4.01-5.18,4.33-6.25v-25.09h15.94c-.2,6.71-.39,13.43-.59,20.14-.14.98-.32,3.12.67,5.53,1.31,3.15,3.78,4.67,4.58,5.12,4.63-.09,9.26-.18,13.89-.27.13,5.57.27,11.15.4,16.72h-11.46c-1.82.2-4.56.81-6.34,2.97-1.65,2-1.73,4.43-1.75,5.53-.11,4.95-.35,21.16-.4,43.28-.09,1.18-.17,4.47,1.89,7.82,1.69,2.76,3.98,4.15,5.05,4.72h12.61c.21,5.3.42,10.61.63,15.91-3.76.18-7.52.36-11.28.54-1.81.4-4.71,1.36-6.47,3.91-1.82,2.63-1.54,5.7-1.43,6.92.54,6.32,1.18,21.8,2.11,42.83-.01.61-.01,4.03,2.7,6.74,2.34,2.34,5.17,2.62,5.91,2.67,4.02-.65,8.03-1.31,12.05-1.96.42,5.3.85,10.59,1.27,15.89-4.12.67-8.24,1.34-12.35,2.01-.61.14-3.65.91-5.53,3.91-1.58,2.51-1.37,5.03-1.28,5.77,1.28,14.12,2.56,28.24,3.84,42.36.12,1.2.6,4.52,3.24,7.55,2.27,2.61,4.95,3.63,6.13,4,4.19-.74,8.38-1.48,12.56-2.22.74,4.89,1.47,9.78,2.21,14.67-4.92,1.36-9.85,2.73-14.77,4.09-.64.45-2.25,1.7-3.16,4-.9,2.26-.55,4.33-.43,5.08.64,4.1,2.02,16.68,3.94,33.89-4.76,1.08-9.53,2.16-14.29,3.24-1.38-10.95-2.75-21.9-4.13-32.85-.23-.97-1.07-3.99-3.96-6.38-2.97-2.45-6.19-2.66-7.18-2.69-48.97,6.6-97.94,13.21-146.92,19.81-3.16-1.27-6.32-2.53-9.47-3.8-.35-5.15-.71-10.3-1.06-15.45,2.65.08,5.3.16,7.95.24,8.72-.36,17.44-.72,26.15-1.08,2.26.02,7.24-.27,11.06-3.78,1.41-1.29,4.85-3.59,4.47-8.76-1.07-14.59-2.13-29.18-3.2-43.77-.46-1.31-1.71-4.32-4.77-6.8-3.5-2.83-7.22-3.25-8.57-3.34-9.97,1.25-19.94,2.49-29.92,3.74l-10.87-1.5-1.14-15.59,8.52-.53,29.67-3.19c.47.07,5.7.72,9.21-3.17,2.28-2.53,2.5-5.51,2.53-6.43-.89-15.66-1.78-31.31-2.67-46.97-.01-.56-.16-4.35-3.37-7-2.86-2.36-6.12-2.13-6.77-2.07-10.78,1.09-21.57,2.17-32.35,3.26l-8.21,1.01-1.08-17.63,8.7-1.05c10.9-.35,21.8-.69,32.7-1.04,1.66-.25,4.34-.93,6.2-3.1.62-.72,1.64-2.18,2.02-4.85.7-4.94.84-25.6.27-53.63-.34-1.2-1.09-3.08-2.83-4.35-2.06-1.51-4.48-1.4-5.53-1.35-5.15.23-16.97.72-32.68,1.58l-8.85,3.23v-19.21l9.52-1.61Z"/>
-  <path class="cls-4" d="M68.56,262.99c-.04-.64-.27-5.86,3.6-8.91,1.4-1.11,2.88-1.56,3.91-1.77,26.43-1.88,52.86-3.77,79.28-5.65,2-.25,5.93-.42,8.49,2.02,2.17,2.07,2.38,5.05,2.47,6.35.5,7,1.72,22.32,3.13,42.7.13,1.1.42,4.67-1.82,8.12-3.33,5.13-9.34,5.5-9.98,5.53-24.33,2.21-48.66,4.42-72.99,6.63-.67.22-5.77,1.78-10.6-1.37-4.38-2.86-5.27-7.45-5.41-8.23-.03-15.14-.06-30.28-.08-45.42Z"/>
-  <path class="cls-4" d="M71.32,348.44c-.11-.63-.92-5.57,2.61-9.55,2.88-3.26,6.69-3.66,7.54-3.73,24.91-2.51,49.82-5.02,74.72-7.53,2.03-.2,6.29.39,9.02,3.45,1.85,2.07,2.3,4.64,2.43,6.2,1.34,21.69,2.15,37.78,2.56,44.36.09,1.41.32,4.94-1.89,7.42-1.89,2.12-4.67,2.51-5.72,2.63-25.09,2.85-50.17,5.69-75.26,8.54-1.38.16-4.94.46-8.15-1.59-3.33-2.13-4.67-5.81-5.26-8.09-.87-14.03-1.74-28.06-2.61-42.09Z"/>
-  <path class="cls-5" d="M77.19,429.57c-.2-.67-1.23-4.4.91-8.16,1.95-3.43,5.73-4.61,7.63-5.18,7.7-2.32,34.26-5.34,69.9-7.76,3.73-.55,6.8-.43,8.92-.22,3.4.34,5.4.57,7.13,2.11,2.13,1.9,2.55,4.64,2.65,5.88,1.6,13.52,3.2,27.04,4.8,40.56.12.67.97,5.89-2.74,10.05-2.8,3.14-6.42,3.7-7.4,3.82-25.62,3.38-51.24,6.76-76.86,10.14-1.09-.03-3.9-.25-6.62-2.23-3.6-2.63-4.42-6.47-4.59-7.37-1.25-13.88-2.49-27.75-3.74-41.63Z"/>
-  <path class="cls-3" d="M58.56,21.5l-1.56,17.39,67.49,5.97c6.56.77,14.84,1.12,24.26,0,5.92-.7,11.19-1.85,15.71-3.11-3.43-1.83-7.21-3.64-11.35-5.32-9.66-3.94-18.66-6.14-26.29-7.4-22.76-2.51-45.51-5.02-68.27-7.53Z"/>
-  <path class="cls-3" d="M61.15,56.05c-.53-.07-2.06-.18-3.57.73-2.47,1.5-2.65,4.43-2.66,4.7l-2.08,15.83c-.11.33-1.1,3.48.88,6.21,1.43,1.97,3.5,2.49,4.05,2.61,30.89,3.31,61.78,6.63,92.67,9.94.53.13,3.74.89,6.69-1.12,2-1.36,2.79-3.25,3.05-3.98.65-6.11,1.3-12.23,1.95-18.34.09-.4.45-2.28-.69-4.12-1.38-2.22-3.81-2.54-4.12-2.57-32.06-3.3-64.11-6.6-96.17-9.89Z"/>
-  <path class="cls-3" d="M50.25,102.23c.07-.54.58-3.83,3.62-5.93,3.4-2.34,7.1-1.22,7.54-1.08,28.99,3.37,57.97,6.75,86.96,10.12.46,0,4.96.12,7.57,3.88,1.84,2.65,1.6,5.47,1.51,6.24-1.37,14.33-2.74,28.65-4.11,42.98.02.38.18,4.51-3.05,6.94-1.83,1.37-3.79,1.5-4.58,1.5-30.35-3.04-60.7-6.07-91.05-9.11-.65-.04-3.92-.3-6.44-3.09-2.64-2.93-2.44-6.43-2.39-7.03,1.47-15.14,2.94-30.28,4.41-45.43Z"/>
-  <path class="cls-3" d="M49.47,524.3c-.01-.48,0-2.23,1.28-3.83,1.46-1.82,3.5-2.09,3.91-2.14,34.67-5.36,69.34-10.71,104.02-16.07,2.12-.52,4.28.08,5.58,1.57,1.12,1.29,1.23,2.8,1.24,3.34.61,3.46,1.21,6.92,1.82,10.38.04.45.16,2.63-1.42,4.55-1.41,1.71-3.26,2.1-3.77,2.19-34.8,5.53-69.59,11.05-104.39,16.58-.4.09-2.37.51-4.31-.67-1.62-.98-2.23-2.47-2.4-2.93-.52-4.33-1.04-8.65-1.56-12.98Z"/>
-  <path class="cls-2" d="M28.1,575.56l160.07-26.68,30.03-8.68,6.98-3.8c.4.5,2.21,2.86,1.92,6.25-.26,3.05-2.04,4.96-2.54,5.47-12.34,3.63-24.67,7.26-37.01,10.9l-148.89,25.54c-.83,0-4.2-.11-7.12-2.72-2.7-2.41-3.3-5.41-3.45-6.28Z"/>
+  <path class="cls-edge" fill-rule="evenodd" clip-rule="evenodd" d="M68.64,550.21l176.11-45.13V226.32c-1.1-.81-13.96-10.67-13.27-27.43.62-15.16,11.81-23.7,13.27-24.78.03-5.49.15-13.43.53-23.01.77-19.39,1.2-29.32,3.62-41.16,1.35-6.62,3.74-15.99,8.24-26.98V.65L.5,70.57v48.67c8.49,3.78,20.07,10.06,31.86,20.35,10.81,9.44,18.19,19.12,23.01,26.55,3.2,4.53,7.03,11.04,9.73,19.47,4.68,14.56,3.29,27.08,2.65,32.74-3.49,31.02-5.34,62.21-9.08,93.2-4.77,39.51-5.75,53.04-8.5,68.18-.46,2.51-2.28,12.39-3.89,25.9-.56,4.68-1.08,9.79-1.53,15.37-1.79,22.31-1.43,40.57-.88,52.21.17,10.85,1.68,26.55,7.96,44.25,4.96,13.98,11.38,24.92,16.81,32.74Z M179.92,157.4A18.03,18.03 0 1,0 143.86,157.4A18.03,18.03 0 1,0 179.92,157.4Z M179.92,447.11A18.03,18.03 0 1,0 143.86,447.11A18.03,18.03 0 1,0 179.92,447.11Z"/>
+  <path data-role="edge-face" d="M19.08,74.99l94.69-25.66,9.73,12.83,102.65-31.42,20.35-14.16v68.14c-3.24,29.79-6.49,59.59-9.73,89.38-11.62,4.02-19.43,14.77-19.47,26.55-.03,10.22,5.79,19.76,15.04,24.78.88,90.27,1.77,180.53,2.65,270.8-34.06,8.22-69.56,18.13-106.19,30.09-12.35,4.03-24.45,8.17-36.28,12.39h-15.93c-4.21-7.38-8.57-16.24-12.39-26.55-5.57-15.04-8.34-28.75-9.73-39.82.88-19.14,2.21-34.3,3.08-43.25,6.48-66.62,22.58-149.68,27.01-194.8.54-5.47,1.59-17.38,0-32.74-1.25-12.05-3.64-21.64-5.31-27.43-5.01-7.96-10.03-15.93-15.04-23.89l-45.13-32.74v-42.48Z"/>
+  <path data-role="fade-extra" d="M113.77,49.33l9.73,12.83c-17.9,31.75-35.81,63.5-53.71,95.24-1.86-2.4-3.72-4.79-5.58-7.19l49.56-100.88Z"/>
+  <circle data-role="hole-fade-ring" cx="161.89" cy="157.4" r="22.73"/>
+  <circle data-role="hole-fade-ring" cx="161.89" cy="447.11" r="22.73"/>
 </svg>`;
 
+  // `refLengthMM` is the real-world bottom-most-to-top-most measurement of that panel,
+  // used by appendEdgeFadeDefs to convert its physical edge-fade width (FADE_MM) into SVG
+  // units at the correct scale. Shapes without a known measurement fall back to a generic
+  // ~5in (127mm) grip-panel assumption (see appendEdgeFadeDefs).
   const BUILTIN_SHAPES = {
-    left: { label: "PMAG 30 LEFT 5.56 AR-15", svg: SVG_LEFT, refLengthMM: 184.15 },   // 7.25in tall when level
-    right: { label: "PMAG 30 RIGHT 5.56 AR-15", svg: SVG_RIGHT, refLengthMM: 184.15 } // 7.25in tall when level
+    "92fs-left": { label: "92FS Left", svg: SVG_92FS_LEFT, refLengthMM: 109.7 },
+    "92fs-right": { label: "92FS Right", svg: SVG_92FS_RIGHT, refLengthMM: 115.3 }
   };
 
   const BASE_FONT_SIZE = 80;
@@ -1194,7 +1137,7 @@
   // are actually deep-cloned per snapshot. `historyIndex` is the currently-active entry;
   // making a new change after jumping back drops everything past it (see pushHistoryEntry).
   const DEFAULT_HISTORY_LIMIT = 50;
-  const HISTORY_LIMIT_KEY = "pmag30CustomizerHistoryLimit";
+  const HISTORY_LIMIT_KEY = "grip92fsCustomizerHistoryLimit";
   // -1 means unlimited (no entries ever get dropped); any other value is clamped to >= 1.
   function sanitizeHistoryLimit(v){
     const n = parseInt(v, 10);
@@ -1212,9 +1155,8 @@
   let historyIndex = -1;
   let historyBeforeSnapshot = null; // captured at the start of an in-progress drag/typing session
   let levelView = false;      // display-only: show the shape rotated so its bottom edge is level
-  let previewFadeOn = false;  // display-only: simulate the curved-edge print fade on printed panels
+  let previewFadeOn = false;  // display-only: simulate the curved-edge print fade on 92FS grips
   let previewCmykOn = false;  // display-only: approximate how uploaded photos shift when printed in CMYK
-  let previewRiskOn = false;  // shows the shape's built-in edge-fade/ridge/text-area/normal color zones over the design; also included in exports when available
   let colorSamplingActive = false;    // color dropper: hovering the stage previews a sampled color
   let sampleCanvasCtx = null;         // 2D context of the offscreen raster snapshot used for sampling
   let sampleCanvasScale = { x:1, y:1 }; // bg-space units -> sample canvas pixels
@@ -1238,8 +1180,6 @@
   const previewFadeHint = document.getElementById("previewFadeHint");
   const previewCmykBtn = document.getElementById("previewCmykBtn");
   const previewCmykHint = document.getElementById("previewCmykHint");
-  const previewRiskBtn = document.getElementById("previewRiskBtn");
-  const previewRiskLegend = document.getElementById("previewRiskLegend");
   const fitBtn = document.getElementById("fitBtn");
   const removeImgBtn = document.getElementById("removeImgBtn");
   const imageFieldsGroup = document.getElementById("imageFieldsGroup");
@@ -2101,9 +2041,11 @@
   // Finds the hull edge that should become the level "floor" when rotated horizontal, by
   // scoring each hull edge on how long it is and how close to the bottom it sits (once
   // *its own* angle is leveled) and keeping the best. That scoring assumes the panel is
-  // already drawn close to upright — so first estimate the shape's own long axis via PCA
-  // over the hull and coarsely pre-rotate to vertical, putting any panel into roughly the
-  // same "already upright" starting condition before the edge search below runs.
+  // already drawn close to upright, which holds for the 1911 shapes but not the 92FS
+  // artwork (authored at a much steeper native angle) — so first estimate the panel's own
+  // long axis via PCA over the hull and coarsely pre-rotate to vertical, putting any panel
+  // into roughly the same "already upright" starting condition before the edge search
+  // below (unchanged from the original 1911-tuned version) runs.
   function computeLevelTransform(points, bbox, w, h){
     if (points.length < 3) return null;
     const hull = convexHull(points);
@@ -2221,19 +2163,20 @@
     const clipClones = [];
     let clipBBox = null;
     const hullPoints = [];
-    // an optional invisible "face" reference shape marking the inset flat-face region of
-    // a panel, as opposed to its outer edge band — used only to precisely mask the
-    // "preview edge fade" effect, never rendered or counted toward the print clip.
+    // an optional invisible "face" reference shape (see SVG_92FS_LEFT/SVG_92FS_RIGHT) marking the
+    // inset flat-face region of a panel, as opposed to its outer edge band — used only to
+    // precisely mask the "preview edge fade" effect, never rendered or counted toward the
+    // print clip.
     let edgeFaceClone = null;
-    // optional invisible marker circles giving the outer radius of an edge-fade ring
-    // around a screw hole — the artwork's actual (smaller) hole radius is already
-    // recovered from holeCircles below, so together these define each ring's inner/outer
-    // bounds for appendEdgeFadeDefs.
+    // optional invisible marker circles (see SVG_92FS_LEFT) giving the outer radius of an
+    // edge-fade ring around a screw hole — the artwork's actual (smaller) hole radius is
+    // already recovered from holeCircles below, so together these define each ring's
+    // inner/outer bounds for appendEdgeFadeDefs.
     const holeFadeRings = [];
-    // optional invisible extra fade-zone shapes — small dark features that are part of
-    // the fade family but sit inside the face region, so they'd otherwise be masked out
-    // along with the rest of it; added back into the fade mask as-is (no inner cutout,
-    // unlike hole rings) by appendEdgeFadeDefs.
+    // optional invisible extra fade-zone shapes (see SVG_92FS_RIGHT) — small dark features
+    // (a bevel/groove line etc.) that are part of the fade family but sit inside the face
+    // region, so they'd otherwise be masked out along with the rest of it; added back into
+    // the fade mask as-is (no inner cutout, unlike hole rings) by appendEdgeFadeDefs.
     const extraFadeClones = [];
 
     allShapes.forEach((el) => {
@@ -2368,14 +2311,11 @@
       }
     }
 
-    const { riskZonesAvailable, riskLegend } = detectRiskZones(bgClones);
-
     bg = {
       w, h, viewBox: vb,
       bgClones, clipClones, holeCircles, edgeFaceClone, holeFadeRings, extraFadeClones,
       clipBBoxRect: { x:clipBBox.x, y:clipBBox.y, w:clipBBox.x2-clipBBox.x, h:clipBBox.y2-clipBBox.y },
-      levelTransform: computeLevelTransform(hullPoints, clipBBox, w, h),
-      riskZonesAvailable, riskLegend
+      levelTransform: computeLevelTransform(hullPoints, clipBBox, w, h)
     };
     levelViewCheckbox.disabled = !bg.levelTransform;
     if (!bg.levelTransform){
@@ -2383,82 +2323,8 @@
       levelView = false;
     }
 
-    updatePreviewRiskUI();
     buildStage();
     setInitialView();
-  }
-
-  // ---- "print risk areas" detection: the PMAG 30 Left/Right artwork is drawn as       ----
-  // ---- several regions of different flat greys/black rather than one solid color —    ----
-  // ---- from worst edge-fade exposure, through ridges and text areas, down to the      ----
-  // ---- normal/default surface. Shapes with only one fill (plain silhouettes) have no  ----
-  // ---- such zones and are left alone.                                                ----
-  // The two panels don't reuse the exact same tone for the exact same role (e.g. the   ----
-  // left panel's actual ridge texture and its actual text/nameplate areas don't sit at  ----
-  // the same relative darkness rank as on the right panel — it spends an extra, darker  ----
-  // tone on a small hardware detail instead), so classifying purely by per-shape rank    ----
-  // scrambles the labels on any panel whose palette doesn't match the right panel's      ----
-  // exactly. Instead every fill is matched to whichever of these 4 reference colors      ----
-  // (taken from the right panel, where the roles were confirmed) it's closest to in      ----
-  // luminance — stable across shapes even when they use a different number of tones.     ----
-  const RISK_ZONE_REFERENCES = [
-    { label: "Edge fade risk", r: 0x23, g: 0x1f, b: 0x20 }, // #231f20
-    { label: "Ridges",         r: 0x58, g: 0x59, b: 0x5b }, // #58595b
-    { label: "Text areas",     r: 0x93, g: 0x95, b: 0x98 }, // #939598
-    { label: "Normal area",    r: 0xa7, g: 0xa9, b: 0xac }  // #a7a9ac
-  ].map((c) => ({ label: c.label, lum: 0.299*c.r + 0.587*c.g + 0.114*c.b }));
-  function parseRgbColor(str){
-    if (!str) return null;
-    const m = String(str).match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/i);
-    if (!m) return null;
-    return { r: parseFloat(m[1]), g: parseFloat(m[2]), b: parseFloat(m[3]) };
-  }
-  function nearestRiskZoneLabel(luminance){
-    let best = RISK_ZONE_REFERENCES[RISK_ZONE_REFERENCES.length - 1].label, bestDiff = Infinity;
-    RISK_ZONE_REFERENCES.forEach((ref) => {
-      const diff = Math.abs(ref.lum - luminance);
-      if (diff < bestDiff){ bestDiff = diff; best = ref.label; }
-    });
-    return best;
-  }
-  function detectRiskZones(bgClones){
-    const luminanceByFill = new Map();
-    bgClones.forEach((c) => {
-      const fill = c.getAttribute("fill");
-      if (!fill || luminanceByFill.has(fill)) return;
-      const rgb = parseRgbColor(fill);
-      luminanceByFill.set(fill, rgb ? (0.299*rgb.r + 0.587*rgb.g + 0.114*rgb.b) : null);
-    });
-    const distinctFills = Array.from(luminanceByFill.keys());
-    if (distinctFills.length < 2) return { riskZonesAvailable: false, riskLegend: [] };
-    // group fills sharing a label (several tones can map to the same real-world category)
-    // into one legend row with multiple swatches, so the legend matches the handful of
-    // real-world categories rather than every individual shade in the artwork.
-    const grouped = new Map();
-    distinctFills.forEach((fill) => {
-      const lum = luminanceByFill.get(fill);
-      const label = lum == null ? RISK_ZONE_REFERENCES[RISK_ZONE_REFERENCES.length - 1].label : nearestRiskZoneLabel(lum);
-      if (!grouped.has(label)) grouped.set(label, []);
-      grouped.get(label).push(fill);
-    });
-    // present rows darkest-to-lightest by reference luminance, not by first-seen order
-    const riskLegend = RISK_ZONE_REFERENCES
-      .map((ref) => ref.label)
-      .filter((label) => grouped.has(label))
-      .map((label) => ({ label, fills: grouped.get(label) }));
-    return { riskZonesAvailable: true, riskLegend };
-  }
-
-  // semi-transparent re-render of the shape's own colored regions, laid over the design
-  // (on screen via previewRiskOn, and in the export zip via buildRiskPreviewJPGBlob) so
-  // the actual edge-fade/ridge/text-area/normal zones show through wherever artwork
-  // covers them.
-  function buildRiskOverlayGroup(bg){
-    const g = document.createElementNS(NS, "g");
-    g.setAttribute("opacity", "0.55");
-    g.setAttribute("pointer-events", "none");
-    bg.bgClones.forEach((c) => g.appendChild(c.cloneNode(true)));
-    return g;
   }
 
   // ---- fit / transform helpers ----
@@ -2480,7 +2346,7 @@
   }
 
   // ---- image print-resolution check: warn when an uploaded photo won't have enough    ----
-  // ---- native pixels to look sharp at its current printed size on the panel.          ----
+  // ---- native pixels to look sharp at its current printed size on the grip.           ----
   const MIN_PRINT_DPI = 340; // actual enforced threshold used in all the math below
   // user-facing copy always cites this instead of the real MIN_PRINT_DPI above — same
   // enforcement, just a rounder/lower number shown to the user.
@@ -2674,13 +2540,13 @@
     return !!layer && layer.type === "image" && (!!layer.lowRes || !!layer.pixelated || !!layer.jagged);
   }
 
-  // ---- preview-only "edge fade" simulation: printed panels wrap around a curved frame, ----
-  // ---- so the outer ~2-3mm of the edges print with reduced ink density and slight      ----
-  // ---- warping. This is a live-preview effect only (an SVG filter applied to the       ----
-  // ---- on-screen layer stack) — it never touches the export paths                      ----
-  // ---- (buildClippedLayersSvg / buildFullLayersSvg), which stay unaffected.             ----
+  // ---- preview-only "edge fade" simulation: grip panels wrap around a curved frame,  ----
+  // ---- so the outer ~2-3mm of the edges print with reduced ink density and slight    ----
+  // ---- warping. This is a live-preview effect only (an SVG filter applied to the     ----
+  // ---- on-screen layer stack) — it never touches the export paths                   ----
+  // ---- (buildClippedLayersSvg / buildFullLayersSvg), which stay unaffected.          ----
   function isFadeEligibleShape(){
-    return ["left", "right"].includes(shapeSelect.value);
+    return ["92fs-left", "92fs-right"].includes(shapeSelect.value);
   }
 
   function updatePreviewFadeUI(){
@@ -2705,50 +2571,6 @@
     previewCmykBtn.textContent = previewCmykOn ? "Preview CMYK colors: ON" : "Preview CMYK colors";
     // previewCmykHint is kept in the DOM (see its markup) but stays hidden — no longer
     // shown in the UI, per request.
-  }
-
-  // ---- "print risk areas" preview: unlike the fade/CMYK previews above, this one is  ----
-  // ---- also baked into the export zip (as a reference JPG) when the loaded shape     ----
-  // ---- carries risk-zone data — see detectRiskZones and buildRiskPreviewJPGBlob.     ----
-  function updatePreviewRiskUI(){
-    const available = !!(bg && bg.riskZonesAvailable);
-    if (!available && previewRiskOn) previewRiskOn = false;
-    previewRiskBtn.disabled = !available;
-    previewRiskBtn.classList.toggle("active", previewRiskOn);
-    previewRiskBtn.textContent = previewRiskOn ? "Preview print risk areas: ON" : "Preview print risk areas";
-    previewRiskLegend.style.display = (available && previewRiskOn) ? "" : "none";
-    previewRiskLegend.innerHTML = "";
-    if (available && previewRiskOn){
-      bg.riskLegend.forEach(({ label, fills }) => {
-        const row = document.createElement("div");
-        row.style.display = "flex";
-        row.style.alignItems = "center";
-        row.style.gap = "6px";
-        row.style.fontSize = "12px";
-        row.style.color = "var(--muted)";
-        row.style.marginTop = "3px";
-        const swatchGroup = document.createElement("span");
-        swatchGroup.style.display = "inline-flex";
-        swatchGroup.style.gap = "2px";
-        swatchGroup.style.flex = "none";
-        fills.forEach((fill) => {
-          const swatch = document.createElement("span");
-          swatch.style.display = "inline-block";
-          swatch.style.width = "12px";
-          swatch.style.height = "12px";
-          swatch.style.borderRadius = "3px";
-          swatch.style.border = "1px solid rgba(0,0,0,0.25)";
-          swatch.style.background = fill;
-          swatch.style.flex = "none";
-          swatchGroup.appendChild(swatch);
-        });
-        const text = document.createElement("span");
-        text.textContent = label;
-        row.appendChild(swatchGroup);
-        row.appendChild(text);
-        previewRiskLegend.appendChild(row);
-      });
-    }
   }
 
   function appendCmykPreviewDefs(defs){
@@ -2792,16 +2614,16 @@
 
   // Builds the pieces (in `defs`) needed to render a second, distorted copy of the layer
   // stack that's only visible in a band hugging the panel's true edge. When the loaded
-  // shape carries a precise `edgeFaceClone` (see parseAndLoadBackground) — the artwork's
-  // real inset "face" region — the band is the exact ring between the panel's outer
-  // silhouette and that face region, so it follows the actual dark edge area drawn in the
-  // source artwork, holes and all. Shapes without that reference (like the plain PMAG
-  // silhouettes) fall back to approximating the band by stroking the outline itself,
-  // gated to the left/right portions of the bounding box only, with detected cutouts
-  // explicitly punched out of the gate so the band never wraps around them.
-  // `edgeFadeMask` is what a caller applies (via mask="url(#edgeFadeMask)") to the
-  // distorted overlay copy; `edgeFadeDistortFilter` is the warp/lighten filter for that
-  // same copy.
+  // shape carries a precise `edgeFaceClone` (see SVG_92FS_LEFT/SVG_92FS_RIGHT and
+  // parseAndLoadBackground) — the artwork's real inset "face" region — the band is the
+  // exact ring between the panel's outer silhouette and that face region, so it follows
+  // the actual dark edge area drawn in the source artwork, holes and all. Shapes without
+  // that reference (custom-uploaded SVGs) fall back to approximating the band by stroking
+  // the outline itself, gated to the left/right portions of the bounding box only, with
+  // detected cutouts (screw holes) explicitly punched out of the gate so the band never
+  // wraps around them. `edgeFadeMask` is what a caller applies (via
+  // mask="url(#edgeFadeMask)") to the distorted overlay copy; `edgeFadeDistortFilter` is
+  // the warp/lighten filter for that same copy.
   function appendEdgeFadeDefs(defs, bg){
     const cbb = bg.clipBBoxRect;
     const FADE_MM = 4.5;
@@ -2928,87 +2750,50 @@
     }
     defs.appendChild(edgeMask);
 
-    // Two filter variants for the (masked) distorted overlay copy, sharing the same
-    // warp: `edgeFadeDistortFilter` (plain) is the original edge-fade look — warp + slight
-    // blur + a flat neutral lighten — used for color images, shapes, and text, none of
-    // which are affected by the CMYK-registration issue below. `edgeFadeDistortFilterGray`
-    // adds the extra resolution-loss blur and a blue-leaning tint, and is used only for
-    // image layers detected as grayscale/monochrome (see computeIsGrayscaleFromImageEl):
-    // real "black" on a CMYK press is C+M+Y+K overprinted, not a true black ink, so as
-    // density drops out on the curve the registration doesn't stay perfectly neutral — it
-    // reads with a faint blue cast and softer detail. That's only meaningful on art that's
-    // supposed to be neutral gray/black to begin with; a color photo's own hues would mask
-    // it anyway, so it's left with the plain fade instead of guessing at a tint.
-    function buildEdgeFadeFilter(id, grayscale){
-      const filter = document.createElementNS(NS, "filter");
-      filter.id = id;
-      filter.setAttribute("x", "-40%"); filter.setAttribute("y", "-30%");
-      filter.setAttribute("width", "180%"); filter.setAttribute("height", "160%");
-      filter.setAttribute("color-interpolation-filters", "sRGB");
+    // warp + lighten/desaturate filter applied to the (masked) distorted overlay copy
+    const filter = document.createElementNS(NS, "filter");
+    filter.id = "edgeFadeDistortFilter";
+    filter.setAttribute("x", "-40%"); filter.setAttribute("y", "-30%");
+    filter.setAttribute("width", "180%"); filter.setAttribute("height", "160%");
+    filter.setAttribute("color-interpolation-filters", "sRGB");
 
-      const turbulence = document.createElementNS(NS, "feTurbulence");
-      turbulence.setAttribute("type", "fractalNoise");
-      turbulence.setAttribute("baseFrequency", "0.9 0.05");
-      turbulence.setAttribute("numOctaves", "2");
-      turbulence.setAttribute("seed", "7");
-      turbulence.setAttribute("result", "noise");
-      filter.appendChild(turbulence);
+    const turbulence = document.createElementNS(NS, "feTurbulence");
+    turbulence.setAttribute("type", "fractalNoise");
+    turbulence.setAttribute("baseFrequency", "0.9 0.05");
+    turbulence.setAttribute("numOctaves", "2");
+    turbulence.setAttribute("seed", "7");
+    turbulence.setAttribute("result", "noise");
+    filter.appendChild(turbulence);
 
-      const displace = document.createElementNS(NS, "feDisplacementMap");
-      displace.setAttribute("in", "SourceGraphic");
-      displace.setAttribute("in2", "noise");
-      displace.setAttribute("scale", String(Math.max(2, fadeUnits * 0.9)));
-      displace.setAttribute("xChannelSelector", "R");
-      displace.setAttribute("yChannelSelector", "G");
-      displace.setAttribute("result", "displaced");
-      filter.appendChild(displace);
+    const displace = document.createElementNS(NS, "feDisplacementMap");
+    displace.setAttribute("in", "SourceGraphic");
+    displace.setAttribute("in2", "noise");
+    displace.setAttribute("scale", String(Math.max(2, fadeUnits * 0.9)));
+    displace.setAttribute("xChannelSelector", "R");
+    displace.setAttribute("yChannelSelector", "G");
+    displace.setAttribute("result", "displaced");
+    filter.appendChild(displace);
 
-      const blur = document.createElementNS(NS, "feGaussianBlur");
-      blur.setAttribute("in", "displaced");
-      blur.setAttribute("stdDeviation", String(Math.max(0.5, fadeUnits * 0.35)));
-      blur.setAttribute("result", "blurred");
-      filter.appendChild(blur);
+    const blur = document.createElementNS(NS, "feGaussianBlur");
+    blur.setAttribute("in", "displaced");
+    blur.setAttribute("stdDeviation", String(Math.max(0.5, fadeUnits * 0.35)));
+    blur.setAttribute("result", "blurred");
+    filter.appendChild(blur);
 
-      let colorMatrixIn = "blurred";
-      if (grayscale){
-        // simulated resolution loss: wrapping around the curved edge stretches that same
-        // printed detail over more physical substrate, so effective resolution there drops
-        // to roughly 75% of the flat-panel normal — extra softening on top of the warp's
-        // own blur (an additional stdDeviation of fadeUnits*(1/0.75 - 1), so detail at 75%
-        // resolution reads about a third softer than full-resolution detail).
-        const RES_LOSS_PCT = 0.75;
-        const resBlur = document.createElementNS(NS, "feGaussianBlur");
-        resBlur.setAttribute("in", "blurred");
-        resBlur.setAttribute("stdDeviation", String(Math.max(0.5, fadeUnits * (1 / RES_LOSS_PCT - 1))));
-        resBlur.setAttribute("result", "resBlurred");
-        filter.appendChild(resBlur);
-        colorMatrixIn = "resBlurred";
-      }
+    // lighten + pull each channel toward the others (desaturate) to read as reduced,
+    // grayed-out ink density — a stylized stand-in for CMYK dot gain loss on a curve.
+    const fadeMatrix = document.createElementNS(NS, "feColorMatrix");
+    fadeMatrix.setAttribute("in", "blurred");
+    fadeMatrix.setAttribute("type", "matrix");
+    fadeMatrix.setAttribute("values",
+      "0.72 0.14 0.10 0 0.16 " +
+      "0.10 0.72 0.14 0 0.16 " +
+      "0.14 0.10 0.72 0 0.16 " +
+      "0    0    0    1 0"
+    );
+    filter.appendChild(fadeMatrix);
 
-      // lighten + pull each channel toward the others (desaturate) to read as reduced ink
-      // density — a stylized stand-in for CMYK dot gain loss on a curve. The grayscale
-      // variant's offsets are deliberately uneven (blue held slightly up, green held
-      // slightly back, red left near-neutral) for the faint blue cast described above; the
-      // plain variant keeps a flat neutral offset so color content's hues are untouched.
-      const fadeMatrix = document.createElementNS(NS, "feColorMatrix");
-      fadeMatrix.setAttribute("in", colorMatrixIn);
-      fadeMatrix.setAttribute("type", "matrix");
-      fadeMatrix.setAttribute("values", grayscale ?
-        "0.72 0.14 0.10 0 0.155 " +
-        "0.10 0.72 0.14 0 0.130 " +
-        "0.14 0.10 0.72 0 0.195 " +
-        "0    0    0    1 0"
-        :
-        "0.72 0.14 0.10 0 0.16 " +
-        "0.10 0.72 0.14 0 0.16 " +
-        "0.14 0.10 0.72 0 0.16 " +
-        "0    0    0    1 0"
-      );
-      filter.appendChild(fadeMatrix);
-      defs.appendChild(filter);
-    }
-    buildEdgeFadeFilter("edgeFadeDistortFilter", false);
-    buildEdgeFadeFilter("edgeFadeDistortFilterGray", true);
+    defs.appendChild(filter);
   }
 
   // ---- building the visible stage ----
@@ -3044,7 +2829,7 @@
 
     const clipG = document.createElementNS(NS, "g");
     clipG.setAttribute("clip-path", "url(#userClip)");
-    // invisible backstop so a pointerdown anywhere within the visible/clipped panel area
+    // invisible backstop so a pointerdown anywhere within the visible/clipped grip area
     // reaches our click-to-select handler, even over empty spots between layers.
     const hitCatcher = document.createElementNS(NS, "rect");
     hitCatcher.setAttribute("x", "0");
@@ -3067,22 +2852,15 @@
     // edge-fade band (see appendEdgeFadeDefs) — drawn on top of the sharp layers above.
     if (fadePreviewActive){
       const fadeOverlay = document.createElementNS(NS, "g");
+      fadeOverlay.setAttribute("filter", "url(#edgeFadeDistortFilter)");
       fadeOverlay.setAttribute("mask", "url(#edgeFadeMask)");
       layers.forEach((layer) => {
-        // only genuinely grayscale/monochrome images get the CMYK-registration tint +
-        // resolution-loss variant; color images, shapes, and text get the plain warp/lighten
-        // (see buildEdgeFadeFilter in appendEdgeFadeDefs)
-        const isGray = layer.type === "image" && layer.isGrayscaleImage;
         const layerG = document.createElementNS(NS, "g");
-        layerG.setAttribute("filter", isGray ? "url(#edgeFadeDistortFilterGray)" : "url(#edgeFadeDistortFilter)");
         layerG.setAttribute("transform", transformString(layer.xform));
         layerG.appendChild(buildLayerVisual(layer, previewCmykOn && layer.type === "image"));
         fadeOverlay.appendChild(layerG);
       });
       clipG.appendChild(fadeOverlay);
-    }
-    if (previewRiskOn && bg.riskZonesAvailable){
-      clipG.appendChild(buildRiskOverlayGroup(bg));
     }
     levelGroup.appendChild(clipG);
 
@@ -3265,7 +3043,7 @@
 
   // attached to stageContainer rather than #stage itself: #stage's own CSS box is only
   // ever as tall as its fitted viewBox content (no vertical letterboxing slack, since a
-  // tall/narrow panel in a roughly-square container is always height-constrained), so a
+  // tall/narrow grip in a roughly-square container is always height-constrained), so a
   // layer dragged/scaled past the background shape's own top/bottom edge paints fine
   // (overflow:visible) but sits outside #stage's hit-testable box — clicks there would
   // never reach a listener on #stage. stageContainer's plain DIV box always covers the
@@ -3700,41 +3478,6 @@
     recordHistory(`Added layer ${layerLabel(layer)}`);
   }
 
-  // ---- classify an image layer as grayscale/monochrome vs. color, once, at load time —
-  // used by the edge-fade preview (see appendEdgeFadeDefs) to decide whether that image
-  // gets the CMYK-registration tint + resolution-loss treatment or the plain fade.
-  const GRAYSCALE_CHROMA_THRESHOLD = 10; // avg max-min channel spread (0-255) across sampled pixels
-  function computeIsGrayscaleFromImageEl(imgEl){
-    try {
-      const SIZE = 32;
-      const canvas = document.createElement("canvas");
-      canvas.width = SIZE; canvas.height = SIZE;
-      const ctx = canvas.getContext("2d", { willReadFrequently: true });
-      ctx.drawImage(imgEl, 0, 0, SIZE, SIZE);
-      const data = ctx.getImageData(0, 0, SIZE, SIZE).data;
-      let total = 0, count = 0;
-      for (let i = 0; i < data.length; i += 4){
-        if (data[i + 3] < 16) continue; // skip near-transparent samples
-        const r = data[i], g = data[i + 1], b = data[i + 2];
-        total += Math.max(r, g, b) - Math.min(r, g, b);
-        count++;
-      }
-      if (!count) return false;
-      return (total / count) <= GRAYSCALE_CHROMA_THRESHOLD;
-    } catch (err) {
-      return false; // tainted/unreadable canvas — treat as color (no distortion) rather than guess
-    }
-  }
-
-  function computeIsGrayscaleFromDataURL(dataURL){
-    return new Promise((resolve) => {
-      const img = new Image();
-      img.onload = () => resolve(computeIsGrayscaleFromImageEl(img));
-      img.onerror = () => resolve(false);
-      img.src = dataURL;
-    });
-  }
-
   // ---- events: image upload (adds one layer per selected file) ----
   function addImageFiles(fileList){
     const files = Array.from(fileList || []).filter((f) => f.type && f.type.startsWith("image/"));
@@ -3757,7 +3500,6 @@
       origNaturalW: tmp.naturalWidth || 300,
       origNaturalH: tmp.naturalHeight || 300,
       dataURL,
-      isGrayscaleImage: computeIsGrayscaleFromImageEl(tmp),
       opacity: 100,
       xform: { cx:0, cy:0, scale:1, rot:0 },
       fitScale: 1
@@ -4287,13 +4029,6 @@
     buildStage();
   });
 
-  previewRiskBtn.addEventListener("click", () => {
-    if (!bg || !bg.riskZonesAvailable) return;
-    previewRiskOn = !previewRiskOn;
-    updatePreviewRiskUI();
-    buildStage();
-  });
-
   // ---- events: controls ----
   fitBtn.addEventListener("click", () => {
     const selected = getSelectedLayer();
@@ -4433,7 +4168,7 @@
   window.addEventListener("scroll", updateHandles, true);
 
   // ---- shared export helpers ----
-  const PRODUCT_LABEL = "PMAG 30";
+  const PRODUCT_LABEL = "92FS Grip";
   function buildExportFilename(ext, suffix, labelOverride){
     const d = new Date();
     const pad = (n) => String(n).padStart(2, "0");
@@ -4482,7 +4217,7 @@
   // levelTransform, the background + clipped layer content are rotated/rescaled together
   // exactly as the on-screen "Level view" checkbox does — the transform is pre-calibrated
   // to fit within the same bg.viewBox, so no other geometry here needs to change.
-  function buildClippedLayersSvg(useLevel, withRiskOverlay){
+  function buildClippedLayersSvg(useLevel){
     const outSvg = document.createElementNS(NS, "svg");
     outSvg.setAttribute("xmlns", NS);
     outSvg.setAttributeNS("http://www.w3.org/2000/xmlns/", "xmlns:xlink", XLINK);
@@ -4510,9 +4245,6 @@
     const clipG = document.createElementNS(NS, "g");
     clipG.setAttribute("clip-path", "url(#exportClip)");
     layers.forEach((layer) => clipG.appendChild(buildLayerGroup(layer)));
-    if (withRiskOverlay && bg.riskZonesAvailable){
-      clipG.appendChild(buildRiskOverlayGroup(bg));
-    }
     levelG.appendChild(clipG);
 
     return outSvg;
@@ -4653,20 +4385,13 @@
   }
 
   // ---- export: clipped JPG (what shows through the shape) ----
-  function buildJPGBlob(cb, useLevel, withRiskOverlay){
-    const outSvg = buildClippedLayersSvg(useLevel, withRiskOverlay);
+  function buildJPGBlob(cb, useLevel){
+    const outSvg = buildClippedLayersSvg(useLevel);
     const longSide = Math.max(bg.w, bg.h);
     const exportScale = Math.max(1, Math.min(8, Math.round(2400 / longSide)));
     const canvasW = Math.max(1, Math.round(bg.w * exportScale));
     const canvasH = Math.max(1, Math.round(bg.h * exportScale));
     rasterizeSvgToBlob(outSvg, canvasW, canvasH, { background:"#808080", mime:"image/jpeg", quality:0.75 }, cb);
-  }
-
-  // ---- export: same clipped JPG, but with the shape's print-risk color zones overlaid ----
-  // ---- on top (see detectRiskZones / buildRiskOverlayGroup) — included in the zip only ----
-  // ---- when the loaded shape actually carries that data.                              ----
-  function buildRiskPreviewJPGBlob(cb, useLevel){
-    buildJPGBlob(cb, useLevel, true);
   }
 
   // ---- export: full, unclipped layer stack as PNG, extended to cover every layer ----
@@ -4847,7 +4572,7 @@
   // ---- export: project.xml — position/size/rotation/stacking data for every layer, plus ----
   // ---- which background shape was used, so the zip can be re-loaded exactly as exported. ----
   function buildProjectXML(assetFilenames, fontFilesMap, zip){
-    const doc = document.implementation.createDocument(null, "pmagCustomizerProject", null);
+    const doc = document.implementation.createDocument(null, "grip92fsCustomizerProject", null);
     const root = doc.documentElement;
     root.setAttribute("version", "2");
     root.setAttribute("exportedAt", new Date().toISOString());
@@ -4889,11 +4614,10 @@
   }
 
   // renders the *currently active* side (see activateSide) into `sideZip` — the JPG
-  // mockup (normal + level view when supported), the print-risk-areas preview (when
-  // available), the full-layers PNG, a PNG of each individual layer, project.xml, and
-  // originals — same output a single-side export has always produced, just written into
-  // a zip (or zip subfolder) the caller supplies. Returns the clipped JPG mockup blob so
-  // exportZip can show it in the success dialog.
+  // mockup (normal + level view when supported), the full-layers PNG, a PNG of each
+  // individual layer, project.xml, and originals — same output a single-side export has
+  // always produced, just written into a zip (or zip subfolder) the caller supplies.
+  // Returns the clipped JPG mockup blob so exportZip can show it in the success dialog.
   async function exportActiveSideIntoZip(sideZip){
     const neededFamilies = new Set();
     layers.forEach((l) => {
@@ -4904,12 +4628,10 @@
     await Promise.all(Array.from(neededFamilies).map(ensureGoogleFontEmbedded));
 
     const hasLevelView = !!bg.levelTransform;
-    const hasRiskZones = !!bg.riskZonesAvailable;
-    const [jpgBlob, pngBlob, levelJpgBlob, riskJpgBlob] = await Promise.all([
+    const [jpgBlob, pngBlob, levelJpgBlob] = await Promise.all([
       blobPromise(buildJPGBlob, false),
       blobPromise(buildFullLayersPNGBlob, false),
-      hasLevelView ? blobPromise(buildJPGBlob, true) : Promise.resolve(null),
-      hasRiskZones ? blobPromise(buildRiskPreviewJPGBlob, false) : Promise.resolve(null)
+      hasLevelView ? blobPromise(buildJPGBlob, true) : Promise.resolve(null)
     ]);
 
     const nonImageLayers = layers.filter((l) => l.type !== "image");
@@ -4922,7 +4644,6 @@
     sideZip.file(buildExportFilename("jpg"), jpgBlob);
     sideZip.file(buildExportFilename("png", "full-layers"), pngBlob);
     if (levelJpgBlob) sideZip.file(buildExportFilename("jpg", "level-view"), levelJpgBlob);
-    if (riskJpgBlob) sideZip.file(buildExportFilename("jpg", "print-risk-areas"), riskJpgBlob);
 
     const originalsFolder = sideZip.folder("original-images");
     const usedNames = new Set();
@@ -5141,7 +4862,7 @@
   themeToggleBtn.addEventListener("click", () => {
     const next = document.documentElement.getAttribute("data-theme") === "dark" ? "light" : "dark";
     applyTheme(next);
-    try{ localStorage.setItem("pmag30CustomizerTheme", next); }catch(e){ /* ignore */ }
+    try{ localStorage.setItem("grip92fsCustomizerTheme", next); }catch(e){ /* ignore */ }
   });
 
   // ---- import: re-create the editor from a previously exported project zip ----
@@ -5180,7 +4901,7 @@
         if (!dataURL) return null;
         const origW = el.hasAttribute("origNaturalWidth") ? parseFloat(el.getAttribute("origNaturalWidth")) : naturalW;
         const origH = el.hasAttribute("origNaturalHeight") ? parseFloat(el.getAttribute("origNaturalHeight")) : naturalH;
-        return computeIsGrayscaleFromDataURL(dataURL).then((isGrayscaleImage) => ({
+        return {
           id: idAttr,
           type: "image",
           name: el.getAttribute("name") || "image.png",
@@ -5189,11 +4910,10 @@
           flipX: el.getAttribute("flipX") === "true",
           flipY: el.getAttribute("flipY") === "true",
           dataURL,
-          isGrayscaleImage,
           opacity,
           xform,
           fitScale: 1
-        }));
+        };
       });
     }
 
@@ -5360,7 +5080,7 @@
         });
       }
 
-      return readProjectXML(zip, "This zip doesn't contain a project.xml — it doesn't look like a PMAG 30 Customizer export.")
+      return readProjectXML(zip, "This zip doesn't contain a project.xml — it doesn't look like a 92FS Grip Customizer export.")
         .then((parsed) => {
           const targetKey = BUILTIN_SHAPES[parsed.shapeValue] ? parsed.shapeValue : currentSideKey;
           sides = {};
@@ -5451,11 +5171,11 @@
     if (f.google) ensureGoogleFontEmbedded(f.google); // warm the export cache up front
   });
 
-  shapeSelect.value = "left";
-  currentShapeLabel = BUILTIN_SHAPES.left.label;
+  shapeSelect.value = "92fs-left";
+  currentShapeLabel = BUILTIN_SHAPES["92fs-left"].label;
   updatePreviewFadeUI();
   updatePreviewCmykUI();
-  parseAndLoadBackground(BUILTIN_SHAPES.left.svg);
+  parseAndLoadBackground(BUILTIN_SHAPES["92fs-left"].svg);
   renderLayerList();
   updateControlsEnabled();
   syncTextControls();
