@@ -718,6 +718,20 @@
     font-size:12px;
     color:var(--muted);
   }
+  .export-progress-track{
+    height:10px;
+    border-radius:6px;
+    background:var(--hover-bg);
+    overflow:hidden;
+    margin:0 0 4px;
+  }
+  .export-progress-fill{
+    height:100%;
+    width:0%;
+    background:var(--accent);
+    border-radius:6px;
+    transition:width .15s ease;
+  }
   .modal-actions{
     display:flex;
     justify-content:flex-end;
@@ -1224,6 +1238,7 @@
   const modalExtra = document.getElementById("modalExtra");
   const modalCancelBtn = document.getElementById("modalCancelBtn");
   const modalOkBtn = document.getElementById("modalOkBtn");
+  const modalActionsEl = modalBox.querySelector(".modal-actions");
 
   // ---- in-app modal dialogs, replacing native alert()/confirm() for the print-quality  ----
   // ---- warnings — some browsers suppress/block native popups (especially repeated ones, ----
@@ -4723,21 +4738,37 @@
     downloadZipBtn.textContent = "Preparing…";
     saveZipMenuBtn.disabled = true;
 
+    // progress is chunked into one step per side plus one for the final zip compression
+    // (which reports its own real percent via generateAsync's onUpdate callback below) —
+    // coarse, but enough to show the page is working rather than frozen.
+    const totalSteps = sidesToExport.length + 1;
+    let stepsDone = 0;
+    showExportProgress(`Rendering ${BUILTIN_SHAPES[sidesToExport[0]].label}… (1 of ${sidesToExport.length})`);
+
     try{
       const zip = new JSZip();
       const mockups = [];
-      for (const key of sidesToExport){
+      for (let i = 0; i < sidesToExport.length; i++){
+        const key = sidesToExport[i];
         activateSide(key);
+        updateExportProgress(stepsDone / totalSteps, `Rendering ${BUILTIN_SHAPES[key].label}… (${i + 1} of ${sidesToExport.length})`);
         const { jpgBlob } = await exportActiveSideIntoZip(zip.folder(key));
         mockups.push({ label: BUILTIN_SHAPES[key].label, jpgBlob });
+        stepsDone++;
+        updateExportProgress(stepsDone / totalSteps);
       }
       activateSide(originalSideKey);
 
-      const zipBlob = await zip.generateAsync({ type: "blob" });
+      updateExportProgress(stepsDone / totalSteps, "Compressing zip…");
+      const zipBlob = await zip.generateAsync({ type: "blob", compression: "DEFLATE", compressionOptions: { level: 9 } }, (metadata) => {
+        updateExportProgress((stepsDone + metadata.percent / 100) / totalSteps);
+      });
+      hideExportProgress();
       triggerDownload(zipBlob, buildExportFilename("zip", null, PRODUCT_LABEL));
       resetDownloadZipBtn();
       showExportSuccessModal(mockups);
     }catch(err){
+      hideExportProgress();
       activateSide(originalSideKey);
       alert(err && err.message ? err.message : "Export failed while rendering one of the layers.");
       resetDownloadZipBtn();
@@ -4749,6 +4780,35 @@
     downloadZipBtn.disabled = !hasAnyLayers;
     downloadZipBtn.textContent = "Download ZIP";
     saveZipMenuBtn.disabled = !hasAnyLayers;
+  }
+
+  // ---- export progress: a non-dismissible bar so a several-second export (rendering  ----
+  // ---- each side, then compressing the zip) doesn't read as a frozen page. Shown/hidden ----
+  // ---- directly (bypassing openModal/queueModal) since its lifetime is controlled by    ----
+  // ---- exportZip itself rather than a user dismissing it — safe to do here since it's   ----
+  // ---- only ever opened once the modal queue is already idle (after any warnings).      ----
+  let exportProgressFillEl = null;
+  function showExportProgress(label){
+    modalMessage.textContent = label;
+    modalExtra.innerHTML = "";
+    const track = document.createElement("div");
+    track.className = "export-progress-track";
+    exportProgressFillEl = document.createElement("div");
+    exportProgressFillEl.className = "export-progress-fill";
+    track.appendChild(exportProgressFillEl);
+    modalExtra.appendChild(track);
+    modalActionsEl.style.display = "none";
+    modalOverlay.style.display = "flex";
+  }
+  function updateExportProgress(fraction, label){
+    if (exportProgressFillEl) exportProgressFillEl.style.width = (Math.max(0, Math.min(1, fraction)) * 100) + "%";
+    if (label != null) modalMessage.textContent = label;
+  }
+  function hideExportProgress(){
+    modalOverlay.style.display = "none";
+    modalActionsEl.style.display = "";
+    modalExtra.innerHTML = "";
+    exportProgressFillEl = null;
   }
 
   // ---- post-export: shows the exported mockup(s) so the user can see what they'll get ----
